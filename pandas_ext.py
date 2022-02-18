@@ -61,7 +61,7 @@ def compare(df1 : pd.DataFrame|pd.Series, df2: pd.DataFrame|pd.Series,numeric: b
 # DATA FRAME MANIPULATION & TRANSFORMATION
 #----------------------------------------
 
-def filter(df: pd.DataFrame|pd.Series, condition: pd.DataFrame|pd.Series, filter_columns: bool=False) -> pd.DataFrame|pd.Seires:
+def filter(df: pd.DataFrame|pd.Series, condition: pd.DataFrame|pd.Series, filter_columns: bool=False) -> pd.DataFrame|pd.Series:
     """
     @Description: Filter a `DataFrame` object based on a match over one or multiple columns. Results can be filtered by rows or both rows and columns.
     @Parameters:
