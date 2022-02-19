@@ -39,6 +39,13 @@ class MyObj():
         else:
             return dict_subset(self.dict_,keys)
 
+    def values(self,keys=None):
+        """
+        Return the values for a subset of attributes
+        """
+        return self.dict(keys).values()
+
+
     def __str__(self):
         return f'{self.__name__} {self.dict_}'
 

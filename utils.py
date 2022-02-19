@@ -1,6 +1,7 @@
 import numpy as np
 from collections import Counter
 import math
+from typing import Iterable
 
 
 # -----------------------------------------------
@@ -60,8 +61,23 @@ def label_counts(arr,labels=None):
     labels = np.unique(arr_) if isNone(labels) else np.array(labels)
     return {'counts':np.array([Counter(arr_)[lab] for lab in labels]),'labels':labels,'num_classes':len(labels)}
 
+def as_1d_array(arr):
+    """
+    Ensure the object is a 1D array. 
+    
+    Typically used in a `for` loop when the object is not guaranteed to be an `Iterable`
+    """
+
+    if isinstance(arr,Iterable):
+        if isinstance(arr,str) or len(np.shape(arr)) == 0:
+            return np.array([arr])
+        else:
+            return np.ravel(arr)
+    else:
+        return np.array([arr])
+
 # -----------------------------------------------
-#   DICT MANIPULATION
+#   DATA TYPES MANIPULATION
 # -----------------------------------------------
 
 def dict_subset(dict_obj, keys):
@@ -69,6 +85,30 @@ def dict_subset(dict_obj, keys):
     Return a subset of the dict object based on the keys
     """
     return {key:dict_obj[key] for key in list(keys)}
+
+
+def enc_str_fr_np(arr,sep=',',br="[|]"):
+    """
+    Encode an array as a string
+    """
+    if isNone(sep): sep = ""
+    if isNone(br):
+        return f"{sep.join(np.array(arr).astype(str))}"
+    else:
+        return f"{br[0]}{sep.join(np.array(arr).astype(str))}{br[-1]}"
+
+# def np_fr_str(string,dtype=int):
+#     return np.array(list(string)).astype(dtype)
+
+def dec_np_fr_str(string,dtype=int,sep=',',br="[|]"):
+    """
+    Decode an array from a string
+    """
+    if isNone(sep):
+        strings = string.strip(br)
+    else: 
+        strings = string.strip(br).split(sep)
+    return np.array([dtype(n) for n in strings])
 
 # -----------------------------------------------
 #   LOGIC FUNCTIONS

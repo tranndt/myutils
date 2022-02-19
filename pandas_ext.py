@@ -1,4 +1,4 @@
-from typing import Iterable
+from typing import Iterable, Tuple
 import numpy as np
 import pandas as pd
 from .utils import *
@@ -7,7 +7,7 @@ from .utils import *
 #   EXTRACT DATA FRAME INFORMATION
 #----------------------------------------
 
-def summary(df:pd.DataFrame|pd.Series) -> pd.DataFrame:
+def summary(df:pd.DataFrame or pd.Series) -> pd.DataFrame or pd.Series:
     """
     Summary table for each columns in the dataframe
     """
@@ -27,7 +27,7 @@ def summary(df:pd.DataFrame|pd.Series) -> pd.DataFrame:
             df_sum.loc[c,"std"] = df_c_notna.std().round(2)
     return df_sum
 
-def compare(df1 : pd.DataFrame|pd.Series, df2: pd.DataFrame|pd.Series,numeric: bool=False) -> pd.DataFrame:
+def compare(df1 : pd.DataFrame or pd.Series, df2: pd.DataFrame or pd.Series,numeric: bool=False) -> pd.DataFrame or pd.Series:
     """
     Compare the 2 DataFrames along the same indexes and columns. 
         - For numeric columns, return the difference. 
@@ -61,7 +61,7 @@ def compare(df1 : pd.DataFrame|pd.Series, df2: pd.DataFrame|pd.Series,numeric: b
 # DATA FRAME MANIPULATION & TRANSFORMATION
 #----------------------------------------
 
-def filter(df: pd.DataFrame|pd.Series, condition: pd.DataFrame|pd.Series, filter_columns: bool=False) -> pd.DataFrame|pd.Series:
+def filter(df: pd.DataFrame or pd.Series, condition: pd.DataFrame or pd.Series, filter_columns: bool=False) -> pd.DataFrame or pd.Series:
     """
     @Description: Filter a `DataFrame` object based on a match over one or multiple columns. Results can be filtered by rows or both rows and columns.
     @Parameters:
@@ -79,8 +79,8 @@ def filter(df: pd.DataFrame|pd.Series, condition: pd.DataFrame|pd.Series, filter
     index_filt = df_.loc[:,columns_filt][condition].dropna().index    
     return df_.loc[index_filt,columns_filt]
 
-def per_class_sample(inputs: pd.DataFrame|pd.Series, targets: pd.DataFrame|pd.Series, 
-                        sampling_dist: str|int|float|Iterable='min',random_state: int=None) -> tuple[pd.DataFrame|pd.Series, pd.DataFrame|pd.Series]:
+def per_class_sample(inputs: pd.DataFrame, targets: pd.DataFrame or pd.Series, 
+                        sampling_dist: str or int or float or Iterable='min',random_state: int=None) -> Tuple[pd.DataFrame or pd.Series, pd.DataFrame or pd.Series]:
     """
     ### Description: 
     Sample inputs based on a distribution of target labels. By default will attempt to sample all classes equally according to the least populous class.
@@ -121,7 +121,7 @@ def per_class_sample(inputs: pd.DataFrame|pd.Series, targets: pd.DataFrame|pd.Se
     return inputs.loc[sampled_index], targets.loc[sampled_index]
 
 
-def match(df_in: pd.DataFrame|pd.Series, oper: str ,values: Iterable[int],strict: bool=False) -> pd.DataFrame|pd.Series:
+def match(df_in: pd.DataFrame or pd.Series, oper: str ,values: Iterable[int],strict: bool=False) -> pd.DataFrame or pd.Series:
     """
     Apply a comparison operation to a list of values and return all results that matches all elements in the list.
 
@@ -141,20 +141,54 @@ def match(df_in: pd.DataFrame|pd.Series, oper: str ,values: Iterable[int],strict
 #   DATA TYPES
 #----------------------------------------
 
-def is_np_dtypes(series: pd.Series ,dtypes : str|tuple|Iterable) -> bool:
+def is_dtypes(df: pd.DataFrame or pd.Series ,dtypes : str or Iterable) -> bool:
     """
     Check if a series is of one or multiple numpy dtypes
     - For `int` dtype, use `"int64"`
     - For `float` dtype, use  `"float64"`
     - For `object` dtype, use  `"O"`
+    - For `boolean` dtype, use `"bool"`
     """
-    return isinstance(series.dtypes,tuple([type(np.dtype(typ)) for typ in dtypes]))
 
-def is_np_numeric(series: pd.Series) -> bool:
+    if isinstance(df, pd.Series):
+        return isinstance(df.dtypes,tuple([type(np.dtype(typ)) for typ in as_1d_array(dtypes)]))
+    elif isinstance(df, Iterable):
+        return isinstance(np.array(df).dtype,tuple([type(np.dtype(typ)) for typ in as_1d_array(dtypes)]))
+    elif isinstance(df, pd.DataFrame):
+        all_dtypes = True
+        for c in df.columns:
+            all_dtypes &= is_dtypes(df[c],dtypes) # Shallow recursion so should not affect performance
+        return all_dtypes
+    else:
+        return False
+
+def is_numeric(df: pd.DataFrame or pd.Series or Iterable) -> bool:
     """
     Check if a series is of numeric numpy dtypes
     """
-    return is_np_dtypes(series,("float64","int64"))
+    return is_dtypes(df,("float64","int64"))
+
+
+def is_bool(df: pd.DataFrame or pd.Series or Iterable,binary_allowed: bool=False) -> bool:
+    """
+    Check if DataFrame, Series or Iterable is of dtypes boolean.  
+    """
+    # First check the dtype information about the object if available
+    is_dtype_bool = is_dtypes(df,"bool") 
+
+    # In case the input dtype is not labeled as bool, or represented as a binary matrix instead
+    can_check_count = binary_allowed or not is_numeric(df)  
+    count_satisfied = False
+    if isinstance(df,pd.DataFrame):
+        count_satisfied = ((df == True)|(df == False)).sum().sum() == df.size
+    elif isinstance(df,pd.Series):
+        count_satisfied = ((df == True)|(df == False)).sum() == df.size
+    elif isinstance(df,Iterable):
+        arr = np.array(df,copy=True)
+        np.place(arr,(arr == True)|(arr == False),True)
+        count_satisfied = arr.sum() == len(arr)
+        
+    return is_dtype_bool or (can_check_count and count_satisfied) 
 
 
 
