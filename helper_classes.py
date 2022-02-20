@@ -1,5 +1,7 @@
 from .utils import *
 import time
+import pandas as pd
+
 
 # -----------------------------------------------
 #   DICT LIKE DUMMY OBJECT
@@ -45,6 +47,11 @@ class MyObj():
         """
         return self.dict(keys).values()
 
+    def to_frame(self,keys=None):
+        """
+        Return the DataFrame for all or a subset of attributes
+        """
+        return pd.DataFrame(self.dict(keys),index=[0])
 
     def __str__(self):
         return f'{self.__name__} {self.dict_}'

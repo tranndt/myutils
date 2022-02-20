@@ -56,25 +56,31 @@ def label_counts(arr,labels=None):
     @Parameters:
         - arr: list-like object (LLO)
         - labels: labels to be included in the counting, even those not in the LLO. Order-sensitive
+
+    @Return: Dict entries
+        - dict[`'counts'`]: Class counts in the order specified by `'labels'`
+        - dict[`'labels'`]: The order in which the class counts are presented
+        - dict[`'num_classes'`]: Number of classes in the array
     """
     arr_ = np.array(arr).ravel() # Omitted dtype=object
     labels = np.unique(arr_) if isNone(labels) else np.array(labels)
     return {'counts':np.array([Counter(arr_)[lab] for lab in labels]),'labels':labels,'num_classes':len(labels)}
 
-def as_1d_array(arr):
+def as_1d_array(arr,dtype=None):
     """
     Ensure the object is a 1D array. 
     
     Typically used in a `for` loop when the object is not guaranteed to be an `Iterable`
     """
+    # Check to see if the element is a ND Iterable that is also not a string
+    is_nd_iter = isinstance(arr,Iterable) and len(np.shape(arr)) > 0 and not isinstance(arr,str)
 
-    if isinstance(arr,Iterable):
-        if isinstance(arr,str) or len(np.shape(arr)) == 0:
-            return np.array([arr])
-        else:
-            return np.ravel(arr)
+    if is_nd_iter:
+        return np.ravel(arr).astype(dtype)
     else:
-        return np.array([arr])
+        if isNone(dtype): 
+            dtype = type(arr)
+        return np.array([arr]).astype(dtype)
 
 # -----------------------------------------------
 #   DATA TYPES MANIPULATION
