@@ -3,6 +3,46 @@ from collections import Counter
 import math
 from typing import Iterable
 
+# -----------------------------------------------
+#   LOGIC FUNCTIONS
+# -----------------------------------------------
+def isNone(var,then=None,els=None):
+    """
+    @Description: Check if a value is None. The typical boolean expression `if var == None` may give rise to error when var is a list/array.
+
+    When `then` != `None` and/or `else_` != `None` 
+    - return `then` if `var` == `None` 
+    - return `else_` if if `var` != `None` 
+
+    """
+    is_None = isinstance(var,type(None))
+    then_return = not isinstance(then,type(None))
+    else_return = not isinstance(els,type(None))
+    # then != None -> return then or else or original value
+    # then == None -> return True or False
+    if then_return:
+        if is_None:
+            return then
+        elif else_return:
+            return els
+        else:
+            return var
+    else:
+        return is_None
+
+# def default_value(var,default_val,default_trigger=None):
+#     """
+#     @Description: Set a value if variable is default value or another default trigger
+#     """
+#     if isNone(default_trigger):
+#         return default_val if isNone(var) else var
+#     else:
+#         return default_val if (type(var) != type(default_trigger)) or (var == default_trigger) else var
+
+def converse(var,choices):
+    assert len(choices)==2, "The converse of more than 2 choices is ambiguous"
+    return choices[0] if var == choices[1] else choices[1]
+
 
 # -----------------------------------------------
 #   ARRAY MANIPULATION
@@ -116,27 +156,6 @@ def dec_np_fr_str(string,dtype=int,sep=',',br="[|]"):
         strings = string.strip(br).split(sep)
     return np.array([dtype(n) for n in strings])
 
-# -----------------------------------------------
-#   LOGIC FUNCTIONS
-# -----------------------------------------------
-def isNone(var):
-    """
-    @Description: Check if a value is None. The typical boolean expression `var == None` may give rise to error when var is a list/array
-    """
-    return isinstance(var,type(None))
-
-def default_value(var,default_val,default_trigger=None):
-    """
-    @Description: Set a value if variable is default value or another default trigger
-    """
-    if isNone(default_trigger):
-        return default_val if isNone(var) else var
-    else:
-        return default_val if (type(var) != type(default_trigger)) or (var == default_trigger) else var
-
-def converse(var,choices):
-    assert len(choices)==2, "The converse of more than 2 choices is ambiguous"
-    return choices[0] if var == choices[1] else choices[1]
 
 
 # -----------------------------------------------

@@ -1,7 +1,6 @@
-from .utils import *
 import time
 import pandas as pd
-
+from .main import *
 
 # -----------------------------------------------
 #   DICT LIKE DUMMY OBJECT
@@ -40,6 +39,12 @@ class MyObj():
             return self.dict_
         else:
             return dict_subset(self.dict_,keys)
+
+    def keys(self):
+        """
+        Return the keys of attributes
+        """
+        return self.dict().keys()
 
     def values(self,keys=None):
         """

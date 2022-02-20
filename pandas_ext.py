@@ -1,7 +1,7 @@
 from typing import Iterable, Tuple
 import numpy as np
 import pandas as pd
-from .utils import *
+from .main import *
 
 #----------------------------------------
 #   EXTRACT DATA FRAME INFORMATION
@@ -14,17 +14,18 @@ def summary(df:pd.DataFrame or pd.Series) -> pd.DataFrame or pd.Series:
     df_sum = pd.DataFrame(index=df.columns,columns=["dtypes","length","unique","samples","mode","range","mean","std","fill"])
     df_sum.index.name = "columns"
     for c in df.columns:
-        df_c_notna = df[c][df[c].notna()]
         df_sum.loc[c,"dtypes"] = df[c].dtypes
-        df_sum.loc[c,"samples"] = (list(df[c].value_counts(ascending=False).index.values[:5]))
+        df_sum.loc[c,"samples"] = (list(df[c].value_counts(ascending=False,dropna=False).index.values[:5]))
         df_sum.loc[c,"length"] = len(df[c])
         df_sum.loc[c,"unique"] = len(df[c].unique())
-        df_sum.loc[c,"mode"] = df_c_notna.mode()[0]
+        df_sum.loc[c,"mode"] = [] if len(df[c].mode()) == 0 else as_1d_array(df[c].mode())[0]
+
+        df_c_notna = df[c][df[c].notna()]
         df_sum.loc[c,"fill"] = np.round(len(df_c_notna)/len(df[c]),2)
         if isinstance(df[c].dtype,(type(np.dtype("float64")),type(np.dtype("int64")))):
-            df_sum.loc[c,"range"] = ([df_c_notna.min(),df_c_notna.max()])
-            df_sum.loc[c,"mean"] = df_c_notna.mean().round(2)
-            df_sum.loc[c,"std"] = df_c_notna.std().round(2)
+            df_sum.loc[c,"range"] = np.round([df_c_notna.min(),df_c_notna.max()],4)
+            df_sum.loc[c,"mean"] = np.round(df_c_notna.mean(),4)
+            df_sum.loc[c,"std"] = np.round(df_c_notna.std(),4)
     return df_sum
 
 def compare(df1 : pd.DataFrame or pd.Series, df2: pd.DataFrame or pd.Series,numeric: bool=False) -> pd.DataFrame or pd.Series:
@@ -44,7 +45,7 @@ def compare(df1 : pd.DataFrame or pd.Series, df2: pd.DataFrame or pd.Series,nume
     if numeric:
         numeric_cols = []
         for c in columns:
-            if is_np_numeric(df1[c]) and is_np_numeric(df2[c]): 
+            if is_numeric(df1[c]) and is_numeric(df2[c]): 
                 numeric_cols.append(c)
                 df_comp.loc[index,c] = (df1_comp.loc[index,c] - df2_comp.loc[index,c])
         return df_comp.loc[index,numeric_cols]
@@ -171,7 +172,7 @@ def is_numeric(df: pd.DataFrame or pd.Series or Iterable) -> bool:
 
 def is_bool(df: pd.DataFrame or pd.Series or Iterable,binary_allowed: bool=False) -> bool:
     """
-    Check if DataFrame, Series or Iterable is of dtypes boolean.  
+    Check if a DataFrame, Series or Iterable is of dtypes boolean.  
     """
     # First check the dtype information about the object if available
     is_dtype_bool = is_dtypes(df,"bool") 
