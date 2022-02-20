@@ -1,7 +1,69 @@
 import numpy as np
+import pandas as pd
 from collections import Counter
 import math
 from typing import Iterable
+
+
+# -----------------------------------------------
+#   DICT LIKE DUMMY OBJECT
+# -----------------------------------------------
+class DictObj():
+    """
+    @Description: Object that serves as a namespace for related attributes within other classes
+    @Example:
+        cpa = CPA1()\n
+        cpa.var1 = DictObj()\n
+        cpa.var1.inputs = [1,2,3]\n
+        print(cpa.var1.inputs)\n
+        >> [1, 2, 3]\n
+        cpa.var2 = DictObj({'a':1,'b':2})\n
+        print(cpa.var2.a,cpa.var2.b)\n
+        >> 1 2
+
+    """
+    def __init__(self,__name__="Dict Object",**kwargs):
+        super(DictObj,self)
+        self.__name__ = __name__
+        self.dict_ = {}
+        self.update(**kwargs)
+
+    def update(self,**kwargs):
+        if kwargs:
+            self.dict_.update(kwargs)
+            for key,value in kwargs.items():
+                self.__setattr__(key,value)
+    
+    def dict(self,keys=None):
+        """
+        Return the dictionary for all or a subset of attributes
+        """
+        if isNone(keys):
+            return self.dict_
+        else:
+            return dict_subset(self.dict_,keys)
+
+    def keys(self):
+        """
+        Return the keys of attributes
+        """
+        return self.dict().keys()
+
+    def values(self,keys=None):
+        """
+        Return the values for a subset of attributes
+        """
+        return self.dict(keys).values()
+
+    def to_frame(self,keys=None,index=None):
+        """
+        Return the DataFrame for all or a subset of attributes
+        """
+        index = isNone(index,then=[0])
+        return pd.DataFrame(self.dict(keys),index=index)
+
+    def __str__(self):
+        return f'{self.__name__} {self.dict_}'
 
 # -----------------------------------------------
 #   LOGIC FUNCTIONS
@@ -12,7 +74,7 @@ def isNone(var,then=None,els=None):
 
     When `then` != `None` and/or `else_` != `None` 
     - return `then` if `var` == `None` 
-    - return `else_` if if `var` != `None` 
+    - return `els` if if `var` != `None` 
 
     """
     is_None = isinstance(var,type(None))
@@ -29,15 +91,6 @@ def isNone(var,then=None,els=None):
             return var
     else:
         return is_None
-
-# def default_value(var,default_val,default_trigger=None):
-#     """
-#     @Description: Set a value if variable is default value or another default trigger
-#     """
-#     if isNone(default_trigger):
-#         return default_val if isNone(var) else var
-#     else:
-#         return default_val if (type(var) != type(default_trigger)) or (var == default_trigger) else var
 
 def converse(var,choices):
     assert len(choices)==2, "The converse of more than 2 choices is ambiguous"
@@ -102,9 +155,20 @@ def label_counts(arr,labels=None):
         - dict[`'labels'`]: The order in which the class counts are presented
         - dict[`'num_classes'`]: Number of classes in the array
     """
-    arr_ = np.array(arr).ravel() # Omitted dtype=object
-    labels = np.unique(arr_) if isNone(labels) else np.array(labels)
-    return {'counts':np.array([Counter(arr_)[lab] for lab in labels]),'labels':labels,'num_classes':len(labels)}
+    arr_copy = as_1d_array(arr)
+    if isNone(labels):
+        labels = np.sort(np.unique(arr_copy))
+    else:
+        labels = np.sort(as_1d_array(labels))
+    counts = np.array([Counter(arr_copy)[lab] for lab in labels])
+
+    lab_cnt_obj = DictObj("Label Counts",
+        counts = counts,
+        labels = labels,
+        total_count = np.sum(counts),
+        num_classes = len(labels),
+    )
+    return lab_cnt_obj
 
 def as_1d_array(arr,dtype=None):
     """
@@ -112,11 +176,13 @@ def as_1d_array(arr,dtype=None):
     
     Typically used in a `for` loop when the object is not guaranteed to be an `Iterable`
     """
-    # Check to see if the element is a ND Iterable that is also not a string
     is_nd_iter = isinstance(arr,Iterable) and len(np.shape(arr)) > 0 and not isinstance(arr,str)
 
     if is_nd_iter:
-        return np.ravel(arr).astype(dtype)
+        arr_1d = np.ravel(arr)
+        if isNone(dtype): 
+            dtype = arr_1d.dtype
+        return arr_1d.astype(dtype)
     else:
         if isNone(dtype): 
             dtype = type(arr)
