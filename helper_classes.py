@@ -3,66 +3,6 @@ import pandas as pd
 from .main import *
 
 # -----------------------------------------------
-#   DICT LIKE DUMMY OBJECT
-# -----------------------------------------------
-class MyObj():
-    """
-    @Description: Object that serves as a namespace for related attributes within other classes
-    @Example:
-        cpa = CPA1()\n
-        cpa.var1 = MyObj()\n
-        cpa.var1.inputs = [1,2,3]\n
-        print(cpa.var1.inputs)\n
-        >> [1, 2, 3]\n
-        cpa.var2 = MyObj({'a':1,'b':2})\n
-        print(cpa.var2.a,cpa.var2.b)\n
-        >> 1 2
-
-    """
-    def __init__(self,__name__="My Object",**kwargs):
-        super(MyObj,self)
-        self.__name__ = __name__
-        self.dict_ = {}
-        self.update(**kwargs)
-
-    def update(self,**kwargs):
-        if kwargs:
-            self.dict_.update(kwargs)
-            for key,value in kwargs.items():
-                self.__setattr__(key,value)
-    
-    def dict(self,keys=None):
-        """
-        Return the dictionary for all or a subset of attributes
-        """
-        if isNone(keys):
-            return self.dict_
-        else:
-            return dict_subset(self.dict_,keys)
-
-    def keys(self):
-        """
-        Return the keys of attributes
-        """
-        return self.dict().keys()
-
-    def values(self,keys=None):
-        """
-        Return the values for a subset of attributes
-        """
-        return self.dict(keys).values()
-
-    def to_frame(self,keys=None):
-        """
-        Return the DataFrame for all or a subset of attributes
-        """
-        return pd.DataFrame(self.dict(keys),index=[0])
-
-    def __str__(self):
-        return f'{self.__name__} {self.dict_}'
-
-
-# -----------------------------------------------
 #   TIMER FOR PROCESSES/TASKS
 # -----------------------------------------------
 

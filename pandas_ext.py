@@ -7,7 +7,7 @@ from .main import *
 #   EXTRACT DATA FRAME INFORMATION
 #----------------------------------------
 
-def summary(df:pd.DataFrame or pd.Series) -> pd.DataFrame or pd.Series:
+def summary(df:pd.DataFrame) -> pd.DataFrame:
     """
     Summary table for each columns in the dataframe
     """
