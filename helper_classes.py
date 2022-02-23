@@ -24,7 +24,7 @@ class ProcessTimer:
         self.prev_[job_id] = self.curr_[job_id]
         self.curr_[job_id] = time.time()
 
-    def execute(self,func,job_id=-1,**func_args):
+    def execute(self,func,job_id=-1,return_val=True,**func_args):
         """
         Record the time for executing a function.
 
@@ -33,12 +33,12 @@ class ProcessTimer:
         Return the time of execution followed by the function followed by the return value(s)
         """
         self.start(job_id)
-        return_val = func(**func_args)
+        val = func(**func_args)
         self.record(job_id)
-        if isNone(return_val):
-            return self.time_elapsed(job_id)
+        if return_val:
+            return self.time_elapsed(job_id),val
         else:
-            return self.time_elapsed(job_id),return_val
+            return self.time_elapsed(job_id)
 
     def step_elapsed(self,job_id=0):
         return -1 if (job_id not in self.prev_.keys() or job_id not in self.curr_.keys()) else self.curr_[job_id] - self.prev_[job_id]

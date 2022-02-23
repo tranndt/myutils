@@ -76,7 +76,7 @@ def bimatrix_cluster(X,clusterer,**kwargs):
     cluster_idxes = as_cluster_indexes(clst.labels_)
     return cluster_idxes #, cluster_cnts
 
-def load_clusters(cluster_idxes,X=None,y=None,is_iloc=False):
+def load_clusters(cluster_idxes,X=None,y=None,is_iloc=True):
     results = []
     if not isNone(X):
         if is_iloc:
@@ -156,7 +156,7 @@ def features_density_summary(df):
     return feat_dens_sum
 
 # All our data 
-def sse_table(cluster_idxes,X,y):
+def cluster_mse_table(cluster_idxes,X,y):
     """
     Table of SSE for each cluster
     """
@@ -165,12 +165,37 @@ def sse_table(cluster_idxes,X,y):
     for X_i in X_cl:
         X_bin = as_binary_frame(X)
         X_i_mean = features_density(X_i) # Our average as the ground truth
-        sse_i = ((X_bin - X_i_mean)**2).sum(axis=1) # Calculate the SSE for all data
+        sse_i = ((X_bin - X_i_mean)**2).mean(axis=1) # Calculate the SSE for all data
         sse_tabl = pd.concat([sse_tabl,sse_i],axis=1,ignore_index=True)
     sse_tabl['y'] = y
+
+    sse_tabl.index.name = 'index'
+    sse_tabl.columns.name = 'cluster'
     return sse_tabl
 
-def cluster_reindex(cluster_idxes,X,y,quota=10,criteria=sse_table,**kwargs):
+def cluster_likeness_table(cluster_idxes,X,y,average=True,TN=False):
+    """
+    Table for total likeness of each row with a cluster. The bigger the value the better
+
+    `average`: the likeness is averaged over each cluster
+    """
+    feat_in_common_tbl = feat_in_common_frame(X,normalized=True,TN=TN)
+    cl_likeness_tbl = pd.DataFrame()
+    for cl_i in cluster_idxes:
+        if average:
+            cl_i_likeness_res = feat_in_common_tbl.loc[:,cl_i].mean(axis=1)
+        else:
+            cl_i_likeness_res = feat_in_common_tbl.loc[:,cl_i].sum(axis=1)
+        cl_likeness_tbl = pd.concat([cl_likeness_tbl,cl_i_likeness_res],axis=1,ignore_index=True)
+    cl_likeness_tbl['y'] = y
+
+    cl_likeness_tbl.index.name = 'index'
+    cl_likeness_tbl.columns.name = 'cluster'
+
+    return cl_likeness_tbl
+
+
+def cluster_reindex(cluster_idxes,X,y,quota=10,criteria=cluster_mse_table,ascending=True,**kwargs):
     crit_table = criteria(cluster_idxes,X,y,**kwargs)
     classes,num_classes = label_counts(y).values(['labels','num_classes'])
 
@@ -185,7 +210,7 @@ def cluster_reindex(cluster_idxes,X,y,quota=10,criteria=sse_table,**kwargs):
             index1 = y.index.drop(y_i.index)    # Set of all cases not in this cluster
             index2 = crit_table[crit_table['y'] == j].index   # Set of cases that is of class j
             diff_quota = max(0,quota-class_counts_i[j])
-            crit_table_ij = crit_table.loc[overlap(index1,index2),i].sort_values()[:diff_quota]
+            crit_table_ij = crit_table.loc[overlap(index1,index2),i].sort_values(ascending=ascending)[:diff_quota]
             cl_idx_new = cl_idx_new.append(crit_table_ij.index)
         cluster_idxes_new.append(cl_idx_new.values)
     return cluster_idxes_new
@@ -237,7 +262,10 @@ def cluster_cofreq_matrix(cluster_idxes_or_labels):
     else:
         cluster_idxes = as_cluster_indexes(cluster_idxes_or_labels)
 
-    dim_size = np.sum([len(cl_i) for cl_i in cluster_idxes])
+    # dim_size = np.sum([len(cl_i) for cl_i in cluster_idxes])
+    # dim_size = label_counts(cluster_idxes).num_classes
+    
+    dim_size = max(as_1d_array(label_counts(cluster_idxes).labels))+1
     sim_matrix = np.zeros(shape=(dim_size,dim_size))
     for cl_i in cluster_idxes:
         for j in range(len(cl_i)):
@@ -265,19 +293,44 @@ def bimatrix_cluster_cv(X,cluster_args,clusterer_cv,return_cofreq_matrix=False,*
     else:
         return cluster_idxes_cv
 
-def binary_likeness_matrix(df,normalized=True,FP=False):
+# def binary_likeness_matrix(df,normalized=True,FP=False):
+#     df_bin = as_binary_matrix(df)
+#     nrows,ncols = df_bin.shape
+#     bi_likeness_mat = []
+#     for row_i in df_bin:
+#         if FP:
+#             bi_likeness_mat.append(((df_bin==row_i)|(row_i==0)).sum(axis=1))
+#         else:
+#             bi_likeness_mat.append((df_bin==row_i).sum(axis=1))
+#     if normalized:
+#         return np.array(bi_likeness_mat) / ncols
+#     else:
+#         return np.array(bi_likeness_mat)
+
+# def binary_likeness_frame(df,normalized=True,FP=False):
+#     return pd.DataFrame(binary_likeness_matrix(df,normalized,FP))
+
+def feat_in_common_matrix(df,normalized=True,TN=False):
+    """
+    When TN = `False`, only calculate the TP counts of column matches between 2 elements. Else calculate both the TP and TN 
+
+    When normalized = `True`: calculate the matches averaged over the number of features 
+    """
     df_bin = as_binary_matrix(df)
     nrows,ncols = df_bin.shape
-    bi_likeness_mat = []
+    feat_in_common_mat = []
     for row_i in df_bin:
-        if FP:
-            bi_likeness_mat.append(((df_bin==row_i)|(row_i==0)).sum(axis=1))
+        if not TN:
+            feat_in_common_mat.append(((df_bin==row_i)&(row_i==1)).sum(axis=1))
         else:
-            bi_likeness_mat.append((df_bin==row_i).sum(axis=1))
+            feat_in_common_mat.append((df_bin==row_i).sum(axis=1))
     if normalized:
-        return np.array(bi_likeness_mat) / ncols
+        return np.array(feat_in_common_mat) / ncols
     else:
-        return np.array(bi_likeness_mat)
+        return np.array(feat_in_common_mat)
 
-def binary_likeness_table(df,normalized=True,FP=None):
-    return pd.DataFrame(binary_likeness_matrix(df,normalized,FP))
+def feat_in_common_frame(df,normalized=True,TN=False,sum=False):
+    df = pd.DataFrame(feat_in_common_matrix(df,normalized,TN))
+    if sum:
+        df['sum'] = df.sum(axis=1)
+    return df

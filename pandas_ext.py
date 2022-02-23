@@ -98,7 +98,7 @@ def per_class_sample(inputs: pd.DataFrame, targets: pd.DataFrame or pd.Series,
             - If a class distribution is an integer (>=1), it will be understood as class counts
     """
     # Convert sampling_dist into list of distribution if not already is
-    counts,labels,num_labels = label_counts(targets).values()
+    counts,labels = label_counts(targets).values(['counts','labels'])
     if isNone(sampling_dist):
         sampling_dist = counts
     if isinstance(sampling_dist,str) & sampling_dist == 'min':
