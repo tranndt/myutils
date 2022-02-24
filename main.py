@@ -254,6 +254,18 @@ def dict_subset(dict_obj, keys):
     return {key:dict_obj[key] for key in list(keys)}
 
 
+def create_mappings(labels,targets=None):
+    if isNone(targets):
+        targets = list(range(len(labels)))
+    encode_mappings = dict(zip(labels,targets))
+    decode_mappings = dict(zip(targets,labels))
+    return encode_mappings,decode_mappings
+
+def mappings_transform(labels,mappings):
+    return [mappings[inp] for inp in as_1d_array(labels)]
+
+# 
+
 def enc_str_fr_np(arr,sep=',',br="[|]"):
     """
     Encode an array as a string
