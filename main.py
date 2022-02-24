@@ -7,6 +7,8 @@ import sys
 import time
 import random
 import re
+import inspect
+
 
 # -----------------------------------------------
 #   DICT LIKE DUMMY OBJECT
@@ -64,6 +66,12 @@ class DictObj():
         """
         index = isNone(index,then=[0])
         return pd.DataFrame(self.dict(keys),index=index)
+
+    def to_series(self,keys=None):
+        """
+        Return the DataFrame for all or a subset of attributes
+        """
+        return pd.Series(self.dict(keys))
 
     def __str__(self):
         return f'{self.__name__} {self.dict_}'
@@ -340,3 +348,7 @@ def random_dataframe(low=2,high=None,size=None,random_state=None):
     np.random.seed(random_state)
     rd = np.random.randint(low,high,size)
     return pd.DataFrame(rd)
+
+
+def get_args(func):
+    return inspect.getfullargspec(func).args
