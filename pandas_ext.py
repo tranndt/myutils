@@ -1,7 +1,57 @@
 from typing import Iterable, Tuple
 import numpy as np
 import pandas as pd
+import os
 from .main import *
+
+#----------------------------------------
+#   READ AND WRITE DATAFRAMES
+#----------------------------------------
+
+def write_dataframe(df,write_to=None,**kwargs):
+    """
+    Write the dataframe according to the extension. Create the new path if necessary
+    """
+    if not isNone(write_to) and isinstance(write_to,str):
+        directory = write_to[:len(write_to) - write_to[::-1].index("/")]
+        if not os.path.isdir(directory):
+            os.makedirs(directory)
+        ext = write_to.split(".")[-1] # get the extension
+        if ext == 'xlsx':
+            df.to_excel(write_to,**kwargs)
+        elif ext in ['tsv','tab']:
+            df.to_csv(write_to,sep='\t',**kwargs)
+        else:
+            df.to_csv(write_to,**kwargs)
+    return df
+
+
+def read_dataframe(filename,index=None,unnamed_col=False,**kwargs):
+    ext = filename.split(".")[-1] # get the extension
+    if ext == 'xlsx':
+        df = pd.read_excel(filename,**kwargs)
+    elif ext in ['tsv','tab']:
+        df = pd.read_csv(filename,sep='\t',**kwargs)
+    else:
+        df = pd.read_csv(filename,**kwargs)
+
+    # Set index column if not None
+    if not isNone(index) and index in df.columns:
+        df = df.set_index(index)
+
+    # Drop the typical 'Unnamed: 0' from the 
+    UNNAMED = "Unnamed: 0"
+    if UNNAMED in df.columns:
+        if unnamed_col == True:
+            pass
+        elif unnamed_col == False:
+            df = df.drop(columns=[UNNAMED])
+        elif isinstance(unnamed_col,(str,int,float)):
+            if unnamed_col in df.columns:
+                unnamed_col = f"index: {unnamed_col}"
+            df = df.rename(columns={UNNAMED:unnamed_col}) 
+
+    return df
 
 #----------------------------------------
 #   EXTRACT DATA FRAME INFORMATION

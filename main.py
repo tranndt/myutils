@@ -3,7 +3,10 @@ import pandas as pd
 from collections import Counter
 import math
 from typing import Iterable
-
+import sys
+import time
+import random
+import re
 
 # -----------------------------------------------
 #   DICT LIKE DUMMY OBJECT
@@ -64,6 +67,50 @@ class DictObj():
 
     def __str__(self):
         return f'{self.__name__} {self.dict_}'
+
+# -----------------------------------------------
+#   TIMER FOR PROCESSES/TASKS
+# -----------------------------------------------
+
+class ProcessTimer:
+    def __init__(self) -> None:
+        self.start_ = {}
+        self.prev_ = {}
+        self.curr_ = {}
+        self.NEW_ID = 0;
+
+    def start(self,job_id=None):
+        job_id = self.NEW_ID if job_id is None else job_id
+        self.start_[job_id] = time.time()
+        self.curr_[job_id] = self.start_[job_id]
+        self.prev_[job_id] = -1
+        self.NEW_ID += 1
+
+    def record(self,job_id=0):
+        self.prev_[job_id] = self.curr_[job_id]
+        self.curr_[job_id] = time.time()
+
+    def execute(self,func,job_id=-1,return_val=True,**func_args):
+        """
+        Record the time for executing a function.
+
+        Return 
+        ---------
+        Return the time of execution followed by the function followed by the return value(s)
+        """
+        self.start(job_id)
+        val = func(**func_args)
+        self.record(job_id)
+        if return_val:
+            return self.time_elapsed(job_id),val
+        else:
+            return self.time_elapsed(job_id)
+
+    def step_elapsed(self,job_id=0):
+        return -1 if (job_id not in self.prev_.keys() or job_id not in self.curr_.keys()) else self.curr_[job_id] - self.prev_[job_id]
+
+    def time_elapsed(self,job_id=0):
+        return -1 if (job_id not in self.start_.keys() or job_id not in self.curr_.keys()) else self.curr_[job_id] - self.start_[job_id]
 
 # -----------------------------------------------
 #   LOGIC FUNCTIONS
@@ -222,7 +269,14 @@ def dec_np_fr_str(string,dtype=int,sep=',',br="[|]"):
         strings = string.strip(br).split(sep)
     return np.array([dtype(n) for n in strings])
 
-
+def dec_np_fr_str2(string,dtype=None,levels=1,sep="\s+",br="[|]| |\n|\t",nest_pattern="\]\s+\[|\]\["):
+    """
+    Split the string representation of a nested list into an n-d array
+    """
+    if levels <= 1:
+        return np.array(re.split(sep,string.strip(br)),dtype=dtype)
+    else: # Verified to work for levels == [1,2]
+        return np.array([dec_np_fr_str2(s,dtype,levels-1,sep,br) for s in re.split(nest_pattern,string)])
 
 # -----------------------------------------------
 #   MATH FUNCTIONS
@@ -259,3 +313,30 @@ def fmt_time(seconds):
     else: 
         ss = f'{int(odd_secs)}'
     return f'{hh}:{mm}:{ss}'
+
+
+# -----------------------------------------------
+#   MOCK DATA & FUNCTIONS
+# -----------------------------------------------
+def random_task(total=30,rate=0.1):
+    low = 1
+    t = ProcessTimer()
+
+    sys.stdout.write(f"Executing a mock job for total epochs = {total} at rate = {rate}\n")
+    sys.stdout.flush()
+    t.start()
+    for epoch in range(total):
+        time.sleep(0.1)
+        result = random.random()        
+        t.record()
+        if result < low:
+            low = result    
+        sys.stdout.write(f"\r> epoch: {epoch+1}/{total} -- current: {result:.3f} -- best: {low:.3f} -- time elapsed: {fmt_time(t.time_elapsed())}")
+        sys.stdout.flush()
+
+# random_task(20)
+
+def random_dataframe(low=2,high=None,size=None,random_state=None):
+    np.random.seed(random_state)
+    rd = np.random.randint(low,high,size)
+    return pd.DataFrame(rd)

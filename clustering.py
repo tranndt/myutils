@@ -293,23 +293,6 @@ def bimatrix_cluster_cv(X,cluster_args,clusterer_cv,return_cofreq_matrix=False,*
     else:
         return cluster_idxes_cv
 
-# def binary_likeness_matrix(df,normalized=True,FP=False):
-#     df_bin = as_binary_matrix(df)
-#     nrows,ncols = df_bin.shape
-#     bi_likeness_mat = []
-#     for row_i in df_bin:
-#         if FP:
-#             bi_likeness_mat.append(((df_bin==row_i)|(row_i==0)).sum(axis=1))
-#         else:
-#             bi_likeness_mat.append((df_bin==row_i).sum(axis=1))
-#     if normalized:
-#         return np.array(bi_likeness_mat) / ncols
-#     else:
-#         return np.array(bi_likeness_mat)
-
-# def binary_likeness_frame(df,normalized=True,FP=False):
-#     return pd.DataFrame(binary_likeness_matrix(df,normalized,FP))
-
 def feat_in_common_matrix(df,normalized=True,TN=False):
     """
     When TN = `False`, only calculate the TP counts of column matches between 2 elements. Else calculate both the TP and TN 
