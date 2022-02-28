@@ -25,7 +25,6 @@ def write_dataframe(df,write_to=None,**kwargs):
             df.to_csv(write_to,**kwargs)
     return df
 
-
 def read_dataframe(filename,index=None,unnamed_col=False,**kwargs):
     ext = filename.split(".")[-1] # get the extension
     if ext == 'xlsx':
@@ -285,6 +284,8 @@ def features_density(df,sort=False):
 
 def features_density_by_threshold(df,threshold=0.5):
     df_dens = features_density(df)
+    if threshold > 1:
+        threshold = threshold/len(df)
     return df_dens[df_dens >= threshold].sort_values(ascending=False)
 
 def features_density_by_rank(df,top=None):
@@ -308,6 +309,8 @@ def rows_density(df,sort=False):
 
 def rows_density_by_threshold(df,threshold=0.5):
     df_dens = rows_density(df)
+    if threshold > 1:
+        threshold = threshold/len(df.columns)
     return df_dens[df_dens >= threshold].sort_values(ascending=False)
 
 def rows_density_by_rank(df,top=None):

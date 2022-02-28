@@ -8,6 +8,7 @@ import time
 import random
 import re
 import inspect
+import os
 
 
 # -----------------------------------------------
@@ -364,3 +365,23 @@ def random_dataframe(low=2,high=None,size=None,random_state=None):
 
 def get_args(func):
     return inspect.getfullargspec(func).args
+
+
+def write_file(string,write_to=None,mode='w'):
+    """
+    Write or append string to a file. Create the new path if necessary
+    """
+    directory = write_to[:len(write_to) - write_to[::-1].index("/")]
+    if not os.path.isdir(directory):
+        os.makedirs(directory)
+    if mode == 'a':
+        string = "\n"+string
+    with open(file=write_to,mode=mode) as f:
+        f.write(string)
+        f.close()
+
+def read_file(filename):
+    with open(file=filename,mode='r') as f:
+        string = f.read()
+        f.close()
+    return string
