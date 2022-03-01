@@ -133,20 +133,39 @@ def isNone(var,then=None,els=None):
     - return `els` if if `var` != `None` 
 
     """
+    # is_None = isinstance(var,type(None))
+    # then_return = not isinstance(then,type(None))
+    # else_return = not isinstance(els,type(None))
+    # # then != None -> return then or else or original value
+    # # then == None -> return True or False
+    # if then_return:
+    #     if is_None:
+    #         return then
+    #     elif else_return:
+    #         return els
+    #     else:
+    #         return var
+    # else:
+    #     return is_None
+
     is_None = isinstance(var,type(None))
-    then_return = not isinstance(then,type(None))
-    else_return = not isinstance(els,type(None))
-    # then != None -> return then or else or original value
-    # then == None -> return True or False
-    if then_return:
-        if is_None:
-            return then
-        elif else_return:
-            return els
-        else:
-            return var
-    else:
+    then_is_None = isinstance(then,type(None))
+    else_is_None = isinstance(els,type(None))
+
+    if then_is_None and else_is_None:
+        # isNone(var=None,then=None,els=None) -> True
+        # isNone(var="Not None",then=None,els=None) -> False
         return is_None
+    elif not then_is_None and is_None:
+        # isNone(var=None,then="then outcome",els="else outcome") -> "then outcome"
+        return then
+    elif not else_is_None and not is_None:
+        # isNone(var="Not None","then outcome",els="else outcome") -> "else outcome"
+        return els
+    else:
+        # isNone(var=None,then=None,els="else outcome") -> None
+        # isNone(var="Not None",then="then outcome",els=None) -> "Not None"
+        return var
 
 def converse(var,choices):
     assert len(choices)==2, "The converse of more than 2 choices is ambiguous"
