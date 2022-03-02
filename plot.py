@@ -5,7 +5,7 @@ import seaborn as sns
 from math import *
 import matplotlib.gridspec as gridspec
 from .main import *
-from .pandas_ext import *
+from .pandas import *
 
 def grid_shape(num_plots,size):
     MAX_WIDTH = 30
@@ -13,7 +13,7 @@ def grid_shape(num_plots,size):
     nrows = ceil(num_plots/ncols)
     return nrows,ncols
 
-def grid_plot(plot_func,plot_args,plot_size=(8,6),gr_shape=None,title=None,**kwargs):
+def grid_plot(plot_func,plot_args,plot_size=(8,6),gr_shape=None,title=None,savefig=None,show=True,**kwargs):
     sizeX,sizeY = plot_size
     nrows,ncols = isNone(gr_shape,
         then = grid_shape(len(plot_args),sizeX)
@@ -30,7 +30,13 @@ def grid_plot(plot_func,plot_args,plot_size=(8,6),gr_shape=None,title=None,**kwa
         plt.suptitle(title)
 
     plt.tight_layout()
-    plt.show()
+    if not isNone(savefig):
+        makedir_to_file(savefig)
+        plt.savefig(savefig,dpi=300)     
+    if show:
+        plt.show()
+    else:   
+        return fig
 
 def plot_bimatrix(data,sort=False,cmap="Greys",ax=None,xlabel=None,ylabel=None,title=None,**kwargs):
     if isinstance(data,np.ndarray):

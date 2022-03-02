@@ -124,6 +124,16 @@ class ProcessTimer:
 # -----------------------------------------------
 #   LOGIC FUNCTIONS
 # -----------------------------------------------
+def makedir_to_file(write_to):
+    if "/" in write_to:
+        directory = write_to[:len(write_to) - write_to[::-1].index("/")]
+    else:
+        directory = "./"
+    if not os.path.isdir(directory):
+        os.makedirs(directory)
+    return directory
+
+
 def isNone(var,then=None,els=None):
     """
     @Description: Check if a value is None. The typical boolean expression `if var == None` may give rise to error when var is a list/array.

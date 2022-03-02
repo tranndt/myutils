@@ -1,3 +1,3 @@
 from .main import *
-from .pandas_ext import *
+from .pandas import *
 from .plot import *
