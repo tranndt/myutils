@@ -9,45 +9,42 @@ import random
 import re
 import inspect
 import os
+import torch
 
 
 # -----------------------------------------------
 #   DICT LIKE DUMMY OBJECT
 # -----------------------------------------------
-class DictObj():
+class PseudoObject():
     """
-    @Description: Object that serves as a namespace for related attributes within other classes
-    @Example:
-        cpa = CPA1()\n
-        cpa.var1 = DictObj()\n
-        cpa.var1.inputs = [1,2,3]\n
-        print(cpa.var1.inputs)\n
-        >> [1, 2, 3]\n
-        cpa.var2 = DictObj({'a':1,'b':2})\n
-        print(cpa.var2.a,cpa.var2.b)\n
-        >> 1 2
-
+    Utility object class
     """
-    def __init__(self,__name__="Dict Object",**kwargs):
-        super(DictObj,self)
-        self.__name__ = __name__
-        self.dict_ = {}
+    def __init__(self,base={},__name__=None,**kwargs):
+        super(PseudoObject,self)
+        super().__setattr__("__name__",isNone(__name__,then=classname(self)))
+        super().__setattr__("__dict__",{})
+        self.update(**base)
         self.update(**kwargs)
 
-    def update(self,**kwargs):
+    def update(self, base={},**kwargs):
+        if base:
+            self.__dict__.update(base)
+            for key,value in base.items():
+                super().__setattr__(str(key),value)   
         if kwargs:
-            self.dict_.update(kwargs)
+            self.__dict__.update(kwargs)
             for key,value in kwargs.items():
-                self.__setattr__(key,value)
-    
+                super().__setattr__(str(key),value)
+        return self
+
     def dict(self,keys=None):
         """
         Return the dictionary for all or a subset of attributes
         """
         if isNone(keys):
-            return self.dict_
+            return self.__dict__
         else:
-            return dict_subset(self.dict_,keys)
+            return dict_subset(self.__dict__,keys)
 
     def keys(self):
         """
@@ -61,21 +58,34 @@ class DictObj():
         """
         return self.dict(keys).values()
 
-    def to_frame(self,keys=None,index=None):
+    def to_frame(self,keys=None,index=None,**kwargs):
         """
         Return the DataFrame for all or a subset of attributes
         """
         index = isNone(index,then=[0])
-        return pd.DataFrame(self.dict(keys),index=index)
+        return pd.DataFrame(self.dict(keys),index=index,**kwargs)
 
-    def to_series(self,keys=None):
+    def to_series(self,keys=None,**kwargs):
         """
         Return the DataFrame for all or a subset of attributes
         """
-        return pd.Series(self.dict(keys))
+        return pd.Series(self.dict(keys),**kwargs)
 
     def __str__(self):
-        return f'{self.__name__} {self.dict_}'
+        return f'{self.__name__} {self.__dict__}'
+
+    def __getattribute__(self,__name):
+        try:
+            return super().__getattribute__(__name)
+        except:
+            return None
+
+    def __setattr__(self,__name,__value):
+        super().__setattr__(__name,__value)
+        self.__dict__.update({__name : __value})
+
+    def __repr__(self):
+        return f"{self.__name__} {self.dict()}"
 
 # -----------------------------------------------
 #   TIMER FOR PROCESSES/TASKS
@@ -124,11 +134,15 @@ class ProcessTimer:
 # -----------------------------------------------
 #   LOGIC FUNCTIONS
 # -----------------------------------------------
-def makedir_to_file(write_to):
-    if "/" in write_to:
-        directory = write_to[:len(write_to) - write_to[::-1].index("/")]
+def dir_to_file(filename):
+    if "/" in filename:
+        directory = filename[:len(filename) - filename[::-1].index("/")-1]
     else:
-        directory = "./"
+        directory = "."
+    return directory
+
+def makedir_to_file(write_to):
+    directory = dir_to_file(write_to)
     if not os.path.isdir(directory):
         os.makedirs(directory)
     return directory
@@ -143,20 +157,6 @@ def isNone(var,then=None,els=None):
     - return `els` if if `var` != `None` 
 
     """
-    # is_None = isinstance(var,type(None))
-    # then_return = not isinstance(then,type(None))
-    # else_return = not isinstance(els,type(None))
-    # # then != None -> return then or else or original value
-    # # then == None -> return True or False
-    # if then_return:
-    #     if is_None:
-    #         return then
-    #     elif else_return:
-    #         return els
-    #     else:
-    #         return var
-    # else:
-    #     return is_None
 
     is_None = isinstance(var,type(None))
     then_is_None = isinstance(then,type(None))
@@ -180,6 +180,31 @@ def isNone(var,then=None,els=None):
 def converse(var,choices):
     assert len(choices)==2, "The converse of more than 2 choices is ambiguous"
     return choices[0] if var == choices[1] else choices[1]
+
+def switch(arg=None,cases={},default=None):
+    """
+    Implement a switch-case function
+
+    `cases` keys can either be a value or a boolean condition. When `arg` is not found as a key in cases or no condition holds true, defer to the `default` value 
+
+    Ex:     
+    ```
+        a = 2
+        switch( arg = a,
+                cases = {
+                    1: "Is 1",
+                    2: "Is 2",
+                    3: "Is 3"},
+                default="Unknown")
+        >> 'Is 2'
+    """
+    if True not in cases.keys():
+        cases.update({True:default})
+
+    if arg in cases.keys():
+        return cases[arg]
+    else:
+        return cases[True]
 
 
 # -----------------------------------------------
@@ -240,14 +265,14 @@ def label_counts(arr,labels=None):
         - dict[`'labels'`]: The order in which the class counts are presented
         - dict[`'num_classes'`]: Number of classes in the array
     """
-    arr_copy = as_1d_array(arr)
+    arr_copy = ravel(arr)
     if isNone(labels):
         labels = np.sort(np.unique(arr_copy))
     else:
-        labels = np.sort(as_1d_array(labels))
+        labels = np.sort(ravel(labels))
     counts = np.array([Counter(arr_copy)[lab] for lab in labels])
 
-    lab_cnt_obj = DictObj("Label Counts",
+    lab_cnt_obj = PseudoObject(__name__ = "Label Counts",
         counts = counts,
         labels = labels,
         total_count = np.sum(counts),
@@ -255,33 +280,113 @@ def label_counts(arr,labels=None):
     )
     return lab_cnt_obj
 
-def as_1d_array(arr,dtype=None):
+def ravel(arr,dtype=None):
     """
-    Ensure the object is a 1D array. 
-    
-    Typically used in a `for` loop when the object is not guaranteed to be an `Iterable`
-    """
-    is_nd_iter = isinstance(arr,Iterable) and len(np.shape(arr)) > 0 and not isinstance(arr,str)
+    Ravel an Iterable of any depth
 
-    if is_nd_iter:
-        arr_1d = np.ravel(arr)
-        if isNone(dtype): 
-            dtype = arr_1d.dtype
-        return arr_1d.astype(dtype)
+    Example
+    --------
+    ```
+    arr = [[-1,0],[1,2,[3,[4,5,[6,[7],[8,[9]]]]],10]]
+    ravel(arr)
+    >> array([-1,  0,  1,  2,  3,  4,  5,  6,  7,  8,  9, 10])
+
+    arr = 1
+    ravel(arr)
+    >> array([1])
+
+    arr = ["a",["string"],"is also", ["an",["iterable"]]]
+    ravel(arr)
+    >> array(['a', 'string', 'is also', 'an', 'iterable'], dtype='<U8')
+    ```
+    """
+    res = as_iterable(arr,list)
+    while True in apply(res,lambda x: isinstance(x,Iterable) and not isinstance(x,str)): # While there exists a child of Iterable type and not a str
+        temp = []
+        for a in as_iterable(res):
+            temp += as_iterable(a,list) # Converting a to a list makes concatenation easier
+        res = temp
+    return np.array(res,dtype)
+
+def get_array_iloc(arr,arr_true=None):
+    """
+    Get the indexes where a value exist in an array, compared to the indexes of a ground truth array if supplied
+    """
+    if isNone(arr_true):
+        return np.where(arr)[0]
     else:
-        if isNone(dtype): 
-            dtype = type(arr)
-        return np.array([arr]).astype(dtype)
+        enc,dec = create_mappings(arr_true)
+        return pd.Series(enc).loc[arr].values
+
+def as_iterable(a,astype=None,force=False):
+    """
+    Convert an object into a specific iterable type. 
+    
+    When the object is not an iterable or when `force`, add 1 list dimension around the object to make it an iterable 
+    """
+    if isinstance(a,Iterable) and not isinstance(a,str) and not force:
+        try:
+            if isinstance(a,torch.Tensor):
+                a = a.detach().numpy()
+            return astype(a)
+        except:
+            return a
+    else:
+        try:
+            return astype([a])
+        except:
+            return [a]
+
+# def apply(array,func=None,*args,**kwargs):
+#     """
+#     Apply a function over all elements of an array/iterable
+#     """
+#     if isinstance(array,Iterable) and not isNone(func):
+#         try:
+#             return type(array)([func(a,*args,**kwargs) for a in array])
+#         except:
+#             return [func(a,*args,**kwargs) for a in array]
+#     else: 
+#         return array
+        
+def cross_permutate(arr1,arr2,astype=tuple):
+    return [as_iterable((*as_iterable(a1),a2),astype) for a1 in as_iterable(arr1) for a2 in as_iterable(arr2)]
+
+def cross_permutations(*arrs, astype=tuple):
+    res = arrs[0]
+    for arr in arrs[1:]:
+        res = cross_permutate(res,arr,astype)
+    return res
+
+def params_permutations(*arrs,keys=None):
+    keys = isNone(keys,then=range(len(arrs)))
+    return [dict(zip(keys,vals)) for vals in cross_permutations(*arrs)]
+
 
 # -----------------------------------------------
 #   DATA TYPES MANIPULATION
 # -----------------------------------------------
 
+
+
+def classname(a):
+    return f"{type(a).__name__}"
+
 def dict_subset(dict_obj, keys):
     """
     Return a subset of the dict object based on the keys
     """
-    return {key:dict_obj[key] for key in list(keys)}
+    subset = dict()
+    for key in as_iterable(keys):
+        if key in dict_obj.keys():
+            subset.update({key:dict_obj[key]})
+        else:
+            subset.update({key:None})
+    return subset
+
+def dec_dict_fr_str(string):
+    import json
+    return json.loads(str(string).replace("'","\""))
 
 
 def create_mappings(labels,targets=None):
@@ -292,7 +397,7 @@ def create_mappings(labels,targets=None):
     return encode_mappings,decode_mappings
 
 def mappings_transform(labels,mappings):
-    return [mappings[inp] for inp in as_1d_array(labels)]
+    return [mappings[inp] for inp in ravel(labels)]
 
 # 
 
@@ -300,23 +405,22 @@ def enc_str_fr_np(arr,sep=',',br="[|]"):
     """
     Encode an array as a string
     """
-    if isNone(sep): sep = ""
+    if isNone(sep): 
+        sep = ""
     if isNone(br):
         return f"{sep.join(np.array(arr).astype(str))}"
     else:
         return f"{br[0]}{sep.join(np.array(arr).astype(str))}{br[-1]}"
 
-# def np_fr_str(string,dtype=int):
-#     return np.array(list(string)).astype(dtype)
 
 def dec_np_fr_str(string,dtype=int,sep=',',br="[|]"):
     """
     Decode an array from a string
     """
     if isNone(sep):
-        strings = string.strip(br)
+        strings = str(string).strip(br)
     else: 
-        strings = string.strip(br).split(sep)
+        strings = str(string).strip(br).split(sep)
     return np.array([dtype(n) for n in strings])
 
 def dec_np_fr_str2(string,dtype=None,levels=1,sep="\s+",br="[|]| |\n|\t",nest_pattern="\]\s+\[|\]\["):
@@ -324,9 +428,19 @@ def dec_np_fr_str2(string,dtype=None,levels=1,sep="\s+",br="[|]| |\n|\t",nest_pa
     Split the string representation of a nested list into an n-d array
     """
     if levels <= 1:
-        return np.array(re.split(sep,string.strip(br)),dtype=dtype)
+        try:
+            ret =  np.array(re.split(sep,string.strip(br)))
+            if sep == "":
+                return ret[1:-1].astype(dtype)
+            else:
+                return ret.astype(dtype)
+        except:
+            try:
+                return dtype(string)
+            except:
+                return string
     else: # Verified to work for levels == [1,2]
-        return np.array([dec_np_fr_str2(s,dtype,levels-1,sep,br) for s in re.split(nest_pattern,string)])
+        return np.array([dec_np_fr_str2(s,dtype,levels-1,sep,br) for s in re.split(nest_pattern,str(string))])
 
 # -----------------------------------------------
 #   MATH FUNCTIONS
@@ -337,6 +451,25 @@ def clamp(val,lower=0,upper=1,default_nan=0):
     """
     return max(lower,min(val,upper))
 
+def sorting_order(array,descending=True):
+    list(zip(sorted(array,reverse=descending)))
+    sorted_element_indexes = dict(zip(sorted(array,reverse=descending),list(range(len(array)))))
+    return np.array([sorted_element_indexes[a] for a in array])
+
+def density(df,normalized=True):
+    if isinstance(df,pd.DataFrame):
+        dens = df.notna().sum().sum()
+        if normalized:
+            dens = dens/df.size
+    elif isinstance(df,pd.Series):
+        dens = df.notna().sum()
+        if normalized:
+            dens = dens/len(df)
+    else:
+        dens = sum(np.array(df) != None)
+        if normalized:
+            dens = dens/len(df)
+    return dens
 
 # -----------------------------------------------
 #   STRING FORMATTING
@@ -386,12 +519,6 @@ def random_task(total=30,rate=0.1):
 
 # random_task(20)
 
-def random_dataframe(low=2,high=None,size=None,random_state=None):
-    np.random.seed(random_state)
-    rd = np.random.randint(low,high,size)
-    return pd.DataFrame(rd)
-
-
 def get_args(func):
     return inspect.getfullargspec(func).args
 
@@ -410,7 +537,196 @@ def write_file(string,write_to=None,mode='w'):
         f.close()
 
 def read_file(filename):
-    with open(file=filename,mode='r') as f:
-        string = f.read()
-        f.close()
-    return string
+    try:
+        with open(file=filename,mode='r') as f:
+            string = f.read()
+            f.close()
+        return string
+    except:
+        return None
+
+
+# -----------------------------------------------
+#   V1.1 Updates
+# -----------------------------------------------
+def apply(array,func,*args,**kwargs):
+    """
+    Apply a function to all elements. Elements where the function can not be applied to (i.e., due to an exception) will be ignored from the output array
+    """
+    arr = as_iterable(array)
+    idxes = range(len(arr))
+    res = []
+    for i,v in zip(idxes,arr):
+        try:
+            res.append(func(i,v,*args,**kwargs))
+        except:
+            try:
+                res.append(func(v,*args,**kwargs))
+            except:
+                continue
+    return np.array(res)
+
+def all_which(array,condition,*args,**kwargs):
+    """
+    Return all elements that satisfy the condition
+    """
+    arr = as_iterable(array)
+    idxes = range(len(arr))
+    res = []
+    for i,v in zip(idxes,arr):
+        try:
+            if condition(i,v,*args,**kwargs):
+                res.append(v)
+        except:
+            try:
+                if condition(v,*args,**kwargs):
+                    res.append(v)
+            except:
+                continue
+    return np.array(res)
+
+def which(array,condition,*args,**kwargs):
+    """
+    Return the first element that satisfy the condition
+    """
+    try:
+        return all_which(array,condition,*args,**kwargs)[0]
+    except:
+        return None
+
+
+def all_where(array,condition,*args,**kwargs):
+    """
+    Return the all indexes that satisfy the condition
+    """
+    arr = as_iterable(array)
+    idxes = range(len(arr))
+    idx = []
+    for i,v in zip(idxes,arr):
+        try:
+            if condition(i,v,*args,**kwargs):
+                idx.append(i)
+        except:
+            if condition(v,*args,**kwargs):
+                idx.append(i)
+            try:
+                if condition(v,*args,**kwargs):
+                    idx.append(i)
+            except:
+                continue
+    return np.array(idx)
+
+def where(array,condition,*args,**kwargs):
+    """
+    Return the first index that satisfy the condition
+    """
+    try:
+        return all_where(array,condition,*args,**kwargs)[0]
+    except:
+        return None
+
+def at(array,iloc=None,loc=None):
+    """
+    Pandas-like array accessor method for generic iterable class. 
+
+    Array elements can be accessed using `iloc` as indexes or `loc` as a boolean array indexer
+
+    Example:
+    ---------
+    ```
+    array = range(10)
+    at(array,loc=[True,False,True,True,True,True])
+    >> array([0, 2, 3, 4, 5])
+
+    at(array,[3,5,3,12])
+    >> array([3,5,3])
+    ```
+    """
+    arr  = as_iterable(array)
+    loc  = isNone(loc, then = [True]*len(arr))
+    iloc = isNone(iloc,then = np.where(loc)[0]) 
+    res  = apply(iloc, lambda v: arr[v])
+    return np.array(res)
+
+def iter_pairs(array):
+    """
+    Return the list of adjacent pairs of elements in the iterable
+    """
+    return apply(array, lambda i,a:(array[i],array[i+1]))
+
+
+def sample(array,k=None,replacement=False,seed=None,**kwargs):
+    """
+    Sample `k` elements from an iterable object, with or without replacement
+    """
+    import random
+    random.seed(seed)
+    if isNone(k):
+        res = array
+    elif replacement:
+        res = random.choices(as_iterable(array,list),k=k,**kwargs)
+    else:
+        res = random.sample(as_iterable(array,list),k)
+    return np.array(res)
+
+
+
+def all(arr,condition,*args,**kwargs):
+    """
+    Whether all elements in the array satisfy the condition
+    """
+    return np.all(apply(arr,condition,*args,**kwargs))
+
+def any(arr,condition,*args,**kwargs):
+    """
+    Whether any element in the array satisfy the condition. 
+    
+    To retrieve which elements satisfy the condition, use `which()` or `all_which()`
+    """
+    return np.any(apply(arr,condition,*args,**kwargs))
+
+
+def num_range(num,step=1):
+    """
+    Return the range a number belongs in, whose two edges are multiples of `step`. The result is lower bound inclusive and upper bound exclusive
+    """
+    div = math.floor(num/step)
+    return np.array([step*div,step*(div+1)])
+
+def round_up(num,step=1):
+    """
+    Round a number to the nearest higher multiple of `step`
+    """
+    return num_range(num,step)[1]
+
+def round_down(num,step=1):
+    """
+    Round a number to the nearest lower multiple of `step`
+    """
+    return num_range(num,step)[0]
+
+def random_strings(length,n=1,alpha=None,replacement=False):
+    """
+    Create `n` random strings of length `length` from an alphabet `alpha`, with/without replacement
+
+    Example:
+    --------
+    ```
+    random_strings(3,9,alpha="123")
+
+    >> array(['112', '333', '131', '132', '123', '113', '323', '313', '111'],dtype='<U3')
+    ```
+    """
+    if isNone(alpha):
+        alpha = list("abcdefghijklmnopqrstuvwxyz")
+    elif isinstance(alpha,str):
+        alpha = list(alpha)
+    else:
+        alpha = apply(alpha,str)
+
+    res = []
+    while len(res) < n:
+        string = "".join(sample(alpha,length,True))
+        if replacement or string not in res or len(alpha)**length < n:
+            res.append(string)
+    return np.array(res)

@@ -23,7 +23,7 @@ def write_dataframe(df,write_to=None,**kwargs):
             df.to_csv(write_to,**kwargs)
     return df
 
-def read_dataframe(filename,index=None,unnamed_col=False,**kwargs):
+def read_dataframe(filename,index=None,unnamed_col=False,as_series=False,**kwargs):
     ext = filename.split(".")[-1] # get the extension
     if ext == 'xlsx':
         df = pd.read_excel(filename,**kwargs)
@@ -47,12 +47,36 @@ def read_dataframe(filename,index=None,unnamed_col=False,**kwargs):
             if unnamed_col in df.columns:
                 unnamed_col = f"index: {unnamed_col}"
             df = df.rename(columns={UNNAMED:unnamed_col}) 
-
-    return df
-
+    if as_series:
+        return df.iloc[:,-1]
+    else:
+        return df
+       
 #----------------------------------------
 #   EXTRACT DATA FRAME INFORMATION
 #----------------------------------------
+def dataframe_like(ref,data=None,index=None,columns=None): 
+    """
+    Create a DataFrame/Series object that has (a subset of) the same index/columns as a reference DataFrame/Series
+    """
+    res = ref
+    if isinstance(ref,pd.DataFrame):
+        index = isNone(index,then=ref.index)
+        columns = isNone(columns,then=ref.columns)
+        if isinstance(data,Iterable):
+            data = np.array(data)
+            index = index[:data.shape[0]]
+            columns = columns[:data.shape[1]]
+        res = pd.DataFrame(data=data,index=index,columns=columns)
+
+    elif isinstance(ref,pd.Series):
+        index = isNone(index,then=ref.index)
+        if isinstance(data,Iterable):
+            data = np.array(data)
+            index = index[:data.shape[0]]
+        res = pd.Series(data=data,index=index)
+    return res
+
 
 def summary(df:pd.DataFrame,nan_values=None) -> pd.DataFrame:
     """
@@ -65,7 +89,7 @@ def summary(df:pd.DataFrame,nan_values=None) -> pd.DataFrame:
         df_sum.loc[c,"samples"] = (list(df[c].value_counts(ascending=False,dropna=False).index.values[:5]))
         df_sum.loc[c,"length"] = len(df[c])
         df_sum.loc[c,"unique"] = len(df[c].unique())
-        df_sum.loc[c,"mode"] = [] if len(df[c].mode()) == 0 else as_1d_array(df[c].mode())[0]
+        df_sum.loc[c,"mode"] = [] if len(df[c].mode()) == 0 else ravel(df[c].mode())[0]
 
         df_c_notna = df[c][df[c].notna()]
         df_sum.loc[c,"fill"] = np.round(len(df_c_notna)/len(df[c]),2)
@@ -127,7 +151,7 @@ def filter(df: pd.DataFrame or pd.Series, condition: pd.DataFrame or pd.Series, 
     index_filt = df_.loc[:,columns_filt][condition].dropna().index    
     return df_.loc[index_filt,columns_filt]
 
-def per_class_sample(inputs: pd.DataFrame, targets: pd.DataFrame or pd.Series, 
+def per_class_sample(X: pd.DataFrame, y: pd.DataFrame or pd.Series, 
                         sampling_dist: str or int or float or Iterable='min',random_state: int=None) -> Tuple[pd.DataFrame or pd.Series, pd.DataFrame or pd.Series]:
     """
     ### Description: 
@@ -145,16 +169,16 @@ def per_class_sample(inputs: pd.DataFrame, targets: pd.DataFrame or pd.Series,
             - If a class distribution is an integer (>=1), it will be understood as class counts
     """
     # Convert sampling_dist into list of distribution if not already is
-    counts,labels = label_counts(targets).values(['counts','labels'])
+    counts,labels = label_counts(y).values(['counts','labels'])
     if isNone(sampling_dist):
         sampling_dist = counts
-    if isinstance(sampling_dist,str) & sampling_dist == 'min':
+    if isinstance(sampling_dist,str) and (sampling_dist == 'min'):
         sampling_dist = min(counts)
     if isinstance(sampling_dist,(int,float,np.int64,np.float64,np.int32,np.float32,np.int16,np.float16)):
         sampling_dist = np.full(shape = labels.shape,fill_value = sampling_dist)
 
-
     sampled_index = pd.Index([])
+    # sampled_iloc = []
     for labels_i,counts_i, sampling_dist_i in zip(labels,counts,sampling_dist):
         # Convert distribution values to actual class counts
         if isNone(sampling_dist_i): 
@@ -163,11 +187,13 @@ def per_class_sample(inputs: pd.DataFrame, targets: pd.DataFrame or pd.Series,
             dist_i = int(counts_i * sampling_dist_i)
         else:
             dist_i = int(clamp(sampling_dist_i,0,counts_i))
-        # Obtain samples with the labels_i   
-        sampled_targets_i = filter(targets,targets==labels_i).sample(dist_i,random_state=random_state)
+        # Obtain samples with the labels_i 
+        sampled_targets_i = filter(y,y==labels_i).sample(dist_i,random_state=random_state)
         sampled_index = sampled_index.append(sampled_targets_i.index)
+    return X.loc[sampled_index], y.loc[sampled_index]
 
-    return inputs.loc[sampled_index], targets.loc[sampled_index]
+    #     sampled_iloc.append(get_array_iloc(sampled_targets_i.index,y.index))
+    # return X.iloc[sampled_iloc], y.iloc[sampled_iloc]
 
 
 def match(df_in: pd.DataFrame or pd.Series, oper: str ,values: Iterable[int],strict: bool=False) -> pd.DataFrame or pd.Series:
@@ -177,7 +203,7 @@ def match(df_in: pd.DataFrame or pd.Series, oper: str ,values: Iterable[int],str
     In strict mode, only keep rows that satisfy all matching requirements 
     """
     mult_result = (df_in != df_in) if oper == "==" else (df_in == df_in)
-    for val in np.array(values):
+    for val in ravel(values):
         mult_result = {
             "<=": mult_result & (df_in <= val), "<"  : mult_result & (df_in < val),
             ">=": mult_result & (df_in >= val), ">"  : mult_result & (df_in > val),
@@ -186,31 +212,111 @@ def match(df_in: pd.DataFrame or pd.Series, oper: str ,values: Iterable[int],str
     df_out = df_in[mult_result].dropna(how={True:"any",False:"all"}[strict])
     return df_out
 
-def aggregate(df,identifiers,key,columns=None,action=None):    
+def aggregate(df,identifiers,agg_columns=None,action=None,clip_outliers=None,**kwargs):    
     """
     Aggregate a subset of columns in a DataFrame along a key column
     
     action == [`sum`,`mean`,`mode`,`median`,`count`]
     """
     df_indexed = df.set_index(identifiers).sort_index()
-    indexes = df_indexed.index.drop_duplicates()
-    columns = isNone(columns,then = df_indexed.columns.drop(key))
+    unique_indexes = df_indexed.index.drop_duplicates()
+    agg_columns = isNone(agg_columns,then = df.columns.drop(identifiers))
 
-    df_aggregated = pd.DataFrame(index=indexes,columns=columns)
+    df_aggregated = pd.DataFrame(index=unique_indexes,columns=agg_columns)
     df_aggregated["action"] = action
-    df_aggregated["count"] = df.value_counts(identifiers).sort_index()     
-    for index in indexes:
-        if action == "mean":
-            df_aggregated.loc[index,columns] = df_indexed.loc[index,columns].mean().values
-        elif action == "mode":
-            df_aggregated.loc[index,columns] = df_indexed.loc[index,columns].mode().values
-        elif action == "median":
-            df_aggregated.loc[index,columns] = df_indexed.loc[index,columns].median().values
-        elif action == "sum":
-            df_aggregated.loc[index,columns] = df_indexed.loc[index,columns].sum().values
-   
+    df_aggregated["count"] = 0  
+
+    for index in unique_indexes:
+        df_group = df_indexed.loc[index,agg_columns]
+        if isinstance(df_group,pd.Series):
+            df_aggregated.loc[index,agg_columns] = df_group
+            df_aggregated.loc[index,"count"] = 1
+
+        # Clip outliers if specified
+        else:
+            if not isNone(clip_outliers):
+                df_group = remove_outliers(df_group,target_column=clip_outliers,**kwargs)
+            df_aggregated.loc[index,"count"] = len(df_group)
+            if action == "mean":
+                df_aggregated.loc[index,agg_columns] = df_group.mean().values
+            elif action == "mode":
+                df_aggregated.loc[index,agg_columns] = df_group.mode().values
+            elif action == "median":
+                df_aggregated.loc[index,agg_columns] = df_group.median().values
+            elif action == "sum":
+                df_aggregated.loc[index,agg_columns] = df_group.sum().values
+
     df_aggregated = df_aggregated.reset_index()
     return df_aggregated
+
+def groupings(df,identifiers,reset_index=True):
+    """
+    Group the DataFrame into seperate DataFrame groupings based on the identifiers
+    """
+    df_indexed = df.set_index(identifiers).sort_index()
+    unique_indexes = df_indexed.index.drop_duplicates()
+    if reset_index:
+        groups = [df_indexed.loc[idx,:].reset_index() for idx in unique_indexes]
+    else:
+        groups = [df_indexed.loc[idx,:] for idx in unique_indexes]
+    return groups
+
+
+def expand(series,index=None,columns=None):
+    """
+    Expand a Series of n-sized arrays into a DataFrame with n columns
+    """
+    if isinstance(series,pd.DataFrame):
+        series = series.iloc[:,-1]
+    if isinstance(series,pd.Series):
+        sr_len = len(series.iloc[0])
+        index = isNone(index, then = series.index)
+        columns = isNone(columns, then = [f"{series.name}[{i}]" for i in range(sr_len)])      
+
+    sr = apply(list(np.array(series)),list)
+    return pd.DataFrame(sr,index=index,columns=columns)
+
+
+def collapse(df,index=None,name=None):
+    """
+    Collapse a DataFrame of n columns into a Series of n-sized arrays
+    """
+    if isinstance(df,(pd.DataFrame,pd.Series)) and isNone(index):
+        index = df.index
+    df_ = apply(list(np.array(df)),np.array)
+    return pd.Series(df_,index=index,name=name)
+
+
+def remove_outliers(array,std_threshold=1,clip="both",target_column=None):
+    """
+    Remove outliers that are a certain standard deviation away from the mean. 
+
+    Can clip either `low`, `high`, or `both` low and high outliers
+    """
+    if isinstance(array,pd.DataFrame) and not isNone(target_column):
+        arr = array[target_column].values
+    else:
+        arr = np.array(array)
+
+    arr_mean = np.mean(arr)
+    arr_std = np.std(arr)
+    if arr_std > 0:
+        std_residuals = (arr - arr_mean)/arr_std
+    else:
+        std_residuals = np.zeros(shape=arr.shape)
+
+    ilocs = {
+        None : np.where(std_residuals == std_residuals)[0],
+        "low" : np.where(std_residuals >= -std_threshold)[0],
+        "high": np.where(std_residuals <= std_threshold)[0],
+        "both": np.where(np.abs(std_residuals) <= std_threshold)[0],
+    }[clip]
+
+    if isinstance(array,(pd.Series,pd.DataFrame)):
+        return array.iloc[ilocs]
+    else:
+        return array[ilocs]
+
 
 #----------------------------------------
 #   DATA TYPES
@@ -226,9 +332,9 @@ def is_dtypes(df: pd.DataFrame or pd.Series ,dtypes : str or Iterable) -> bool:
     """
 
     if isinstance(df, pd.Series):
-        return isinstance(df.dtypes,tuple([type(np.dtype(typ)) for typ in as_1d_array(dtypes)]))
+        return isinstance(df.dtypes,tuple([type(np.dtype(typ)) for typ in ravel(dtypes)]))
     elif isinstance(df, Iterable):
-        return isinstance(np.array(df).dtype,tuple([type(np.dtype(typ)) for typ in as_1d_array(dtypes)]))
+        return isinstance(np.array(df).dtype,tuple([type(np.dtype(typ)) for typ in ravel(dtypes)]))
     elif isinstance(df, pd.DataFrame):
         all_dtypes = True
         for c in df.columns:
@@ -280,23 +386,23 @@ def features_density(df,sort=False):
     else:
         return density
 
-def features_density_by_threshold(df,threshold=0.5):
+def features_density_by_threshold(df,threshold=None):
     df_dens = features_density(df)
+    threshold = isNone(threshold,then=0)
     if threshold > 1:
         threshold = threshold/len(df)
     return df_dens[df_dens >= threshold].sort_values(ascending=False)
 
 def features_density_by_rank(df,top=None):
     df_dens = features_density(df)
-    if isNone(top):
-        top = len(df_dens)
+    top = isNone(top,then=len(df_dens))
     if isinstance(top,float):
         top = int(min(len(df_dens),len(df_dens)*top))
     return df_dens.sort_values(ascending=False)[:top]
 
 def rows_density(df,sort=False):
     if isinstance(df,pd.DataFrame):
-        density = as_binary_frame(df).sum(axis=1) / len(df.columns)
+        density = as_binary_frame(df).sum(axis=1)/len(df.columns)
     elif isinstance(df,pd.Series):
         density = df.notna().replace({True:1,False:0})
     if sort:
@@ -305,68 +411,90 @@ def rows_density(df,sort=False):
         return density
     # return as_binary_frame(df).sum(axis=1) / len(df.columns)
 
-def rows_density_by_threshold(df,threshold=0.5):
+def rows_density_by_threshold(df,threshold=None):
     df_dens = rows_density(df)
+    threshold = isNone(threshold,then=0)
     if threshold > 1:
         threshold = threshold/len(df.columns)
     return df_dens[df_dens >= threshold].sort_values(ascending=False)
 
 def rows_density_by_rank(df,top=None):
     df_dens = rows_density(df)
-    if isNone(top):
-        top = len(df_dens)
+    top = isNone(top,then=len(df_dens))
     if isinstance(top,float):
         top = int(min(len(df_dens),len(df_dens)*top))
     return df_dens.sort_values(ascending=False)[:top]
 
-def as_binary_frame(X,bool=False):
+def as_binary_frame(X,bool=False,nan_values=None):
+    X_bin = X.copy()
+    if not isNone(nan_values):
+        X_bin = match(X,"!=",nan_values)
     if bool:
-        return X.notna()
+        X_bin = X.notna()
     else:
-        return X.notna().replace({True:1,False:0})
+        X_bin = X.notna().replace({True:1,False:0})
+    return X_bin
 
-def as_binary_matrix(X,bool=False):
-    return as_binary_frame(X,bool).values
+def as_binary_matrix(X,bool=False,nan_values=None):
+    return as_binary_frame(X,bool,nan_values).values
+
+
+def randint_dataframe(low=2,high=None,size=None,seed=None):
+    np.random.seed(seed)
+    rd = np.random.randint(low,high,size)
+    return pd.DataFrame(rd)
+
+def random_dataframe(size=None,seed=None):
+    np.random.seed(seed)
+    rd = np.random.random(size)
+    return pd.DataFrame(rd)
 
 
 #----------------------------------------
 #   CLUSTERING
 #----------------------------------------
 
-def as_cluster_indexes(cluster_labels,index=None):
-    cluster_idxes = []
+def as_cluster_ilocs(cluster_labels):
+    cluster_ilocs = []
     for i in np.sort(np.unique(cluster_labels)):
         cluster_iloc = np.where(cluster_labels==i)[0]
-        if isNone(index):
-            cluster_idxes.append(cluster_iloc)
-        else:
-            cluster_idxes.append(np.array(index)[cluster_iloc])
-    return cluster_idxes
+        cluster_ilocs.append(cluster_iloc)
+    return cluster_ilocs
 
-def cluster_counts(cluster_idxes_or_labels,y,drop_total=False):
+# def as_cluster_indexes(cluster_labels,index=None):
+#     cluster_idxes = []
+#     for i in np.sort(np.unique(cluster_labels)):
+#         cluster_iloc = np.where(cluster_labels==i)[0]
+#         if isNone(index):
+#             cluster_idxes.append(cluster_iloc)
+#         else:
+#             cluster_idxes.append(np.array(index)[cluster_iloc])
+#     return cluster_idxes
+
+def cluster_counts(cluster_ilocs_or_labels,y,drop_total=False):
     """
     Find the class make-up of each cluster
     """
-    if isinstance(cluster_idxes_or_labels[0],(pd.Int64Index,np.ndarray)): # if is_indexes
-        cluster_idxes = cluster_idxes_or_labels
+    if isinstance(cluster_ilocs_or_labels[0],(pd.Int64Index,np.ndarray)): # if is_indexes
+        cluster_ilocs = cluster_ilocs_or_labels
     else:
-        cluster_idxes = as_cluster_indexes(cluster_idxes_or_labels)
+        cluster_ilocs = as_cluster_ilocs(cluster_ilocs_or_labels)
 
     classes, class_counts = label_counts(y).values(['labels','counts'])
     # Calculate the class distribution for each cluster
     results = pd.DataFrame()
-    for clust_idx_i in cluster_idxes:
-        labels_i,counts_i,total_i = label_counts(y[clust_idx_i],
+    for clust_idx_i in cluster_ilocs:
+        labels_i,counts_i,total_i = label_counts(y.iloc[clust_idx_i],
                                                 labels=classes).values(['labels','counts','total_count'])
-        cluser_i_cnt = DictObj(
-            **dict(zip(as_1d_array(labels_i,str),counts_i)),
+        cluser_i_cnt = PseudoObject(
+            **dict(zip(ravel(labels_i,str),counts_i)),
             cluster_total = total_i
         )
         results = pd.concat([results,cluser_i_cnt.to_frame()],ignore_index=True)
 
     # Add the class counts info
-    class_total = DictObj(
-        **dict(zip(as_1d_array(classes,str),class_counts)),
+    class_total = PseudoObject(
+        **dict(zip(ravel(classes,str),class_counts)),
         cluster_total = np.sum(class_counts)
     ).to_frame(index=["class_total"])
     results = pd.concat([results,class_total])
@@ -386,23 +514,17 @@ def bimatrix_cluster(X,clusterer,**kwargs):
     clst = clusterer(**kwargs).fit(as_binary_matrix(X))
 
     # Retrieve the indexes and counts from the clustering result
-    cluster_idxes = as_cluster_indexes(clst.labels_)
-    return cluster_idxes #, cluster_cnts
+    cluster_ilocs = as_cluster_ilocs(clst.labels_)
+    return cluster_ilocs #, cluster_cnts
 
-def load_clusters(cluster_idxes,X=None,y=None,is_iloc=True):
+def load_clusters(cluster_ilocs,X=None,y=None,is_iloc=True):
     results = []
     if not isNone(X):
-        if is_iloc:
-            X_cl = [X.iloc[cl_i] for cl_i in cluster_idxes]
-        else:
-            X_cl = [X.loc[cl_i] for cl_i in cluster_idxes]
+        X_cl = [X.iloc[cl_i] for cl_i in cluster_ilocs]
         results.append(X_cl)
 
     if not isNone(y):
-        if is_iloc:
-            y_cl = [y.iloc[cl_i] for cl_i in cluster_idxes]
-        else:
-            y_cl = [y.loc[cl_i] for cl_i in cluster_idxes]
+        y_cl = [y.iloc[cl_i] for cl_i in cluster_ilocs]
         results.append(y_cl)
 
     if not isNone(X) and not isNone(y):
@@ -410,7 +532,14 @@ def load_clusters(cluster_idxes,X=None,y=None,is_iloc=True):
     else:
         return results[0]
 
-
+def partition_clusters(cluster_ilocs,X,y,rows_density=None,features_density=None):
+    partitions = []
+    X_cl,y_cl = load_clusters(cluster_ilocs,X,y)
+    for X_i,y_i in zip(X_cl,y_cl):
+        index = rows_density_by_threshold(X_i,rows_density).index
+        columns = features_density_by_threshold(X_i,features_density).index
+        partitions.append([X_i.loc[index,columns],y_i.loc[index]])
+    return partitions
 
 def features_density_summary(df):
     feat_dens_sum = pd.Series(dtype=float)
@@ -426,11 +555,11 @@ def features_density_summary(df):
     return feat_dens_sum
 
 # All our data 
-def cluster_mse_table(cluster_idxes,X,y):
+def cluster_mse_table(cluster_ilocs,X,y):
     """
     Table of SSE for each cluster
     """
-    X_cl = load_clusters(cluster_idxes,X=X)
+    X_cl = load_clusters(cluster_ilocs,X=X)
     sse_tabl = pd.DataFrame()
     for X_i in X_cl:
         X_bin = as_binary_frame(X)
@@ -443,7 +572,7 @@ def cluster_mse_table(cluster_idxes,X,y):
     sse_tabl.columns.name = 'cluster'
     return sse_tabl
 
-def cluster_likeness_table(cluster_idxes,X,y,average=True,TN=False):
+def cluster_likeness_table(cluster_ilocs,X,y,average=True,TN=False):
     """
     Table for total likeness of each row with a cluster. The bigger the value the better
 
@@ -451,7 +580,7 @@ def cluster_likeness_table(cluster_idxes,X,y,average=True,TN=False):
     """
     feat_in_common_tbl = feat_in_common_frame(X,normalized=True,TN=TN)
     cl_likeness_tbl = pd.DataFrame()
-    for cl_i in cluster_idxes:
+    for cl_i in cluster_ilocs:
         if average:
             cl_i_likeness_res = feat_in_common_tbl.loc[:,cl_i].mean(axis=1)
         else:
@@ -465,41 +594,41 @@ def cluster_likeness_table(cluster_idxes,X,y,average=True,TN=False):
     return cl_likeness_tbl
 
 
-def cluster_reindex(cluster_idxes,X,y,quota=10,criteria=cluster_mse_table,ascending=True,**kwargs):
-    crit_table = criteria(cluster_idxes,X,y,**kwargs)
+def cluster_reindex(cluster_ilocs,X,y,quota=10,criteria=cluster_mse_table,ascending=True,**kwargs):
+    crit_table = criteria(cluster_ilocs,X,y,**kwargs)
     classes,num_classes = label_counts(y).values(['labels','num_classes'])
 
-    cluster_idxes_new = []
-    for i in range(len(cluster_idxes)):
-        cl_i = cluster_idxes[i]
+    cluster_ilocs_new = []
+    for i in range(len(cluster_ilocs)):
+        cl_i = cluster_ilocs[i]
         y_i = y.iloc[cl_i]
         class_counts_i = label_counts(y_i,labels=classes).counts
 
-        cl_idx_new = pd.Index(cl_i)
+        cl_ilocs_new = pd.Index(cl_i)
         for j in classes:
             index1 = y.index.drop(y_i.index)    # Set of all cases not in this cluster
             index2 = crit_table[crit_table['y'] == j].index   # Set of cases that is of class j
             diff_quota = max(0,quota-class_counts_i[j])
             crit_table_ij = crit_table.loc[overlap(index1,index2),i].sort_values(ascending=ascending)[:diff_quota]
-            cl_idx_new = cl_idx_new.append(crit_table_ij.index)
-        cluster_idxes_new.append(cl_idx_new.values)
-    return cluster_idxes_new
+            cl_ilocs_new = cl_ilocs_new.append(crit_table_ij.index)
+        cluster_ilocs_new.append(cl_ilocs_new.values)
+    return cluster_ilocs_new
 
-def cluster_cofreq_matrix(cluster_idxes_or_labels):
+def cluster_cofreq_matrix(cluster_ilocs_or_labels):
     """
     Adjacency matrix indicating the frequency with which each pair of elements is grouped into the same cluster.
     """
-    if isinstance(cluster_idxes_or_labels[0],(pd.Int64Index,np.ndarray)): # if is_indexes
-        cluster_idxes = cluster_idxes_or_labels
+    if isinstance(cluster_ilocs_or_labels[0],(pd.Int64Index,np.ndarray)): # if is_indexes
+        cluster_ilocs = cluster_ilocs_or_labels
     else:
-        cluster_idxes = as_cluster_indexes(cluster_idxes_or_labels)
+        cluster_ilocs = as_cluster_ilocs(cluster_ilocs_or_labels)
 
-    # dim_size = np.sum([len(cl_i) for cl_i in cluster_idxes])
-    # dim_size = label_counts(cluster_idxes).num_classes
+    # dim_size = np.sum([len(cl_i) for cl_i in cluster_ilocs])
+    # dim_size = label_counts(cluster_ilocs).num_classes
     
-    dim_size = max(as_1d_array(label_counts(cluster_idxes).labels))+1
+    dim_size = max(ravel(label_counts(cluster_ilocs).labels))+1
     sim_matrix = np.zeros(shape=(dim_size,dim_size))
-    for cl_i in cluster_idxes:
+    for cl_i in cluster_ilocs:
         for j in range(len(cl_i)):
             idx_ij = cl_i[j]
             for k in range(j,len(cl_i)):
@@ -513,17 +642,17 @@ def cluster_cofreq_matrix(cluster_idxes_or_labels):
 def bimatrix_cluster_cv(X,cluster_args,clusterer_cv,return_cofreq_matrix=False,**kwargs):
     cofreq_matrix_cv = np.zeros(shape=(len(X),len(X)))
     for clusterer,args in cluster_args:
-        cluster_idxes_i = bimatrix_cluster(X,clusterer,**args)
-        cofreq_matrix_i = cluster_cofreq_matrix(cluster_idxes_i)
+        cluster_ilocs_i = bimatrix_cluster(X,clusterer,**args)
+        cofreq_matrix_i = cluster_cofreq_matrix(cluster_ilocs_i)
         cofreq_matrix_cv += cofreq_matrix_i
 
     # Similar to bimatrix_cluster but now we fit the sim_matrix using the clusterer_cv
     clst = clusterer_cv(**kwargs).fit(cofreq_matrix_cv)
-    cluster_idxes_cv = as_cluster_indexes(clst.labels_)
+    cluster_ilocs_cv = as_cluster_ilocs(clst.labels_)
     if return_cofreq_matrix:
-        return cluster_idxes_cv,cofreq_matrix_cv
+        return cluster_ilocs_cv,cofreq_matrix_cv
     else:
-        return cluster_idxes_cv
+        return cluster_ilocs_cv
 
 def feat_in_common_matrix(df,normalized=True,TN=False):
     """
