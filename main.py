@@ -366,7 +366,12 @@ def params_permutations(*arrs,keys=None):
 # -----------------------------------------------
 #   DATA TYPES MANIPULATION
 # -----------------------------------------------
+def dtype(array):
+    return np.array(array).dtype.__str__()
 
+def as_dtype(array):
+    _dtype_ = dtype(array) if not isinstance(array,str) else array
+    return lambda x: np.array(x,dtype=_dtype_)
 
 
 def classname(a):
@@ -730,3 +735,11 @@ def random_strings(length,n=1,alpha=None,replacement=False):
         if replacement or string not in res or len(alpha)**length < n:
             res.append(string)
     return np.array(res)
+
+
+def tryf(f,*args,**kwargs):
+    try:
+        f(*args,**kwargs)
+        return True
+    except:
+        return False

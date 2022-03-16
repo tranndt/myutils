@@ -85,15 +85,16 @@ def summary(df:pd.DataFrame,nan_values=None) -> pd.DataFrame:
     df_sum = pd.DataFrame(index=df.columns,columns=["dtypes","length","unique","samples","mode","range","mean","std","fill"])
     df_sum.index.name = "columns"
     for c in df.columns:
-        df_sum.loc[c,"dtypes"] = df[c].dtypes
+        df_sum.loc[c,"dtypes"] = dtype(df[c])
         df_sum.loc[c,"samples"] = (list(df[c].value_counts(ascending=False,dropna=False).index.values[:5]))
+        # df_sum.loc[c,"samples_cnt"] = label_counts(df[c],df_sum.loc[c,"samples"]).counts
         df_sum.loc[c,"length"] = len(df[c])
         df_sum.loc[c,"unique"] = len(df[c].unique())
         df_sum.loc[c,"mode"] = [] if len(df[c].mode()) == 0 else ravel(df[c].mode())[0]
 
         df_c_notna = df[c][df[c].notna()]
         df_sum.loc[c,"fill"] = np.round(len(df_c_notna)/len(df[c]),2)
-        if isinstance(df[c].dtype,(type(np.dtype("float64")),type(np.dtype("int64")))):
+        if dtype(df[c]).startswith(("int","float")):
             df_sum.loc[c,"range"] = np.round([df_c_notna.min(),df_c_notna.max()],4)
             df_sum.loc[c,"mean"] = np.round(df_c_notna.mean(),4)
             df_sum.loc[c,"std"] = np.round(df_c_notna.std(),4)
@@ -316,6 +317,103 @@ def remove_outliers(array,std_threshold=1,clip="both",target_column=None):
         return array.iloc[ilocs]
     else:
         return array[ilocs]
+
+
+# ----------------------------------------------
+# Encoders
+#----------------------------------------------
+
+class CategoricalEncoder:
+    def __init__(self):
+        super().__init__()
+    
+    def fit(self,array,target_labels=None):
+        array_labels = pd.unique(array)
+        target_labels = isNone(target_labels,then=range(len(array_labels)))
+        self.encode_mappings = dict(zip(array_labels,target_labels))
+        self.decode_mappings = dict(zip(target_labels,array_labels))
+        return self
+
+    def transform(self,array,dtype=object):
+        return np.array([self.encode_mappings[a] for a in as_iterable(array)],dtype=dtype)
+
+    def inv_transform(self,array,dtype=object):
+        return np.array([self.decode_mappings[a] for a in as_iterable(array)],dtype=dtype)
+
+    def fit_transform(self,array,target_labels=None,dtype=object):
+        return self.fit(array,target_labels).transform(array,dtype)
+
+    def mappings(self):
+        return self.encode_mappings, self.decode_mappings
+
+
+class NullEncoder:
+    def __init__(self,fillna=np.mean,unique=None):
+        self.fillna = fillna
+        self.unique = unique
+    
+    def fit(self,array):
+        arr = pd.Series(array)
+        if tryf(self.fillna,arr):
+            self.nan_value = self.fillna(arr)  
+        else:
+            self.nan_value = self.fillna
+        # Ensure that the nan value is unique (if required) by incrementing by a specified value
+        while self.nan_value in np.array(array) and self.unique:
+            self.nan_value += self.unique
+        return self
+
+    def transform(self,array):
+        return pd.Series(array).fillna(self.nan_value).values
+
+    def fit_transform(self,array):
+        return self.fit(array).transform(array)
+
+    def inv_transform(self,array):
+        return pd.Series(array).replace({self.nan_value: None}).values
+
+    def mappings(self):
+        return {None:self.nan_value},{self.nan_value:None}
+
+
+class AutoDataPrep:
+    def __init__(self,max_categories=10,
+                fillna_cont=np.mean, unique_cont=None,
+                fillna_cat="$null$",unique_cat=None):
+        self.max_categories = max_categories
+        self.fillna_cont = fillna_cont
+        self.unique_cont = unique_cont
+        self.fillna_cat = fillna_cat
+        self.unique_cat = unique_cat
+        self.mappings_ = dict()
+
+    def fit_transform(self,X):
+        X_prep = X.copy()
+        for c in X.columns:
+            is_categorical = lambda x: dtype(x)=="object" or len(pd.unique(x)) <= self.max_categories # or not try_f(as_dtype("float"),x)
+            equals = lambda a,b: np.all(a==b)
+            if is_categorical(X[c]):
+                encoders    = [ NullEncoder(fillna=self.fillna_cat,unique=self.unique_cat),
+                                CategoricalEncoder()]
+                X0 = encoders[0].fit_transform(X[c])
+                X1 = encoders[1].fit_transform(X0,dtype=int)
+                X_prep[c]   = X1
+                mappings = encoders[1].mappings()[0]
+                if self.fillna_cat in mappings:
+                    mappings.update({None:mappings.pop(self.fillna_cat)})
+            else:
+                encoders = [NullEncoder(fillna=self.fillna_cont,unique=self.unique_cont)]
+                X0 = encoders[0].fit_transform(X[c])
+                X_prep[c] = X0
+                if equals(X_prep[c],X[c]):
+                    mappings = None
+                else:
+                    mappings = encoders[0].mappings()[0]
+            self.mappings_[c] = mappings
+        return X_prep
+
+    def mappings(self):
+        return self.mappings_
 
 
 #----------------------------------------
