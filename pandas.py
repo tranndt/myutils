@@ -78,22 +78,34 @@ def dataframe_like(ref,data=None,index=None,columns=None):
     return res
 
 
-def summary(df:pd.DataFrame,nan_values=None) -> pd.DataFrame:
+def summary(df:pd.DataFrame,nan={}) -> pd.DataFrame:
     """
     Summary table for each columns in the dataframe
     """
-    df_sum = pd.DataFrame(index=df.columns,columns=["dtypes","length","unique","samples","mode","range","mean","std","fill"])
+    df_sum = pd.DataFrame(index=df.columns,columns=["dtypes","length","unique","samples","samples_pct","nan_value","mode","range","mean","std","fill"])
     df_sum.index.name = "columns"
     for c in df.columns:
+        samples_cnts = df[c].value_counts(ascending=False,dropna=False).iloc[:5]
         df_sum.loc[c,"dtypes"] = dtype(df[c])
-        df_sum.loc[c,"samples"] = (list(df[c].value_counts(ascending=False,dropna=False).index.values[:5]))
-        # df_sum.loc[c,"samples_cnt"] = label_counts(df[c],df_sum.loc[c,"samples"]).counts
+        df_sum.loc[c,"samples"] = (list(samples_cnts.index.values))
+        df_sum.loc[c,"samples_pct"] = (list(np.round(samples_cnts.values/len(df[c])*100,2)))
         df_sum.loc[c,"length"] = len(df[c])
         df_sum.loc[c,"unique"] = len(df[c].unique())
         df_sum.loc[c,"mode"] = [] if len(df[c].mode()) == 0 else ravel(df[c].mode())[0]
 
-        df_c_notna = df[c][df[c].notna()]
+        if isinstance(nan,dict) and c in nan.keys():
+            nan_value = nan[c]
+            df_c_notna = df[c][df[c] != nan_value]
+        elif type_of(nan).startswith(("int","float")):
+            nan_value = nan
+            df_c_notna = df[c][df[c] != nan_value]
+        else:
+            nan_value = np.nan
+            df_c_notna = df[c][df[c].notna()]
+
+        df_sum.loc[c,"nan_value"] = nan_value
         df_sum.loc[c,"fill"] = np.round(len(df_c_notna)/len(df[c]),2)
+        
         if dtype(df[c]).startswith(("int","float")):
             df_sum.loc[c,"range"] = np.round([df_c_notna.min(),df_c_notna.max()],4)
             df_sum.loc[c,"mean"] = np.round(df_c_notna.mean(),4)
@@ -324,14 +336,15 @@ def remove_outliers(array,std_threshold=1,clip="both",target_column=None):
 #----------------------------------------------
 
 class CategoricalEncoder:
-    def __init__(self):
+    def __init__(self,target_labels=None):
         super().__init__()
+        self.target_labels = target_labels
     
-    def fit(self,array,target_labels=None):
+    def fit(self,array):
         array_labels = pd.unique(array)
-        target_labels = isNone(target_labels,then=range(len(array_labels)))
-        self.encode_mappings = dict(zip(array_labels,target_labels))
-        self.decode_mappings = dict(zip(target_labels,array_labels))
+        self.target_labels = isNone(self.target_labels,then=range(len(array_labels)))
+        self.encode_mappings = dict(zip(array_labels,self.target_labels))
+        self.decode_mappings = dict(zip(self.target_labels,array_labels))
         return self
 
     def transform(self,array,dtype=object):
@@ -340,15 +353,15 @@ class CategoricalEncoder:
     def inv_transform(self,array,dtype=object):
         return np.array([self.decode_mappings[a] for a in as_iterable(array)],dtype=dtype)
 
-    def fit_transform(self,array,target_labels=None,dtype=object):
-        return self.fit(array,target_labels).transform(array,dtype)
+    def fit_transform(self,array,dtype=object):
+        return self.fit(array).transform(array,dtype)
 
     def mappings(self):
         return self.encode_mappings, self.decode_mappings
 
 
 class NullEncoder:
-    def __init__(self,fillna=np.mean,unique=None):
+    def __init__(self,fillna=None,unique=None):
         self.fillna = fillna
         self.unique = unique
     

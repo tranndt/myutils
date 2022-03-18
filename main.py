@@ -554,104 +554,131 @@ def read_file(filename):
 # -----------------------------------------------
 #   V1.1 Updates
 # -----------------------------------------------
-def apply(array,func,*args,**kwargs):
-    """
-    Apply a function to all elements. Elements where the function can not be applied to (i.e., due to an exception) will be ignored from the output array
-    """
-    arr = as_iterable(array)
-    idxes = range(len(arr))
-    res = []
-    for i,v in zip(idxes,arr):
-        try:
-            res.append(func(i,v,*args,**kwargs))
-        except:
-            try:
-                res.append(func(v,*args,**kwargs))
-            except:
-                continue
-    return np.array(res)
+# def apply(array,func,*args,**kwargs):
+#     """
+#     Apply a function to all elements. Elements where the function can not be applied to (i.e., due to an exception) will be ignored from the output array
+#     """
+#     arr = as_iterable(array)
+#     idxes = range(len(arr))
+#     res = []
+#     for i,v in zip(idxes,arr):
+#         try:
+#             res.append(func(i,v,*args,**kwargs))
+#         except:
+#             try:
+#                 res.append(func(v,*args,**kwargs))
+#             except:
+#                 continue
+#     return np.array(res)
 
-def all_which(array,condition,*args,**kwargs):
-    """
-    Return all elements that satisfy the condition
-    """
-    arr = as_iterable(array)
-    idxes = range(len(arr))
-    res = []
-    for i,v in zip(idxes,arr):
-        try:
-            if condition(i,v,*args,**kwargs):
-                res.append(v)
-        except:
-            try:
-                if condition(v,*args,**kwargs):
-                    res.append(v)
-            except:
-                continue
-    return np.array(res)
+# def all_which(array,condition,*args,**kwargs):
+#     """
+#     Return all elements that satisfy the condition
+#     """
+#     arr = as_iterable(array)
+#     idxes = range(len(arr))
+#     res = []
+#     for i,v in zip(idxes,arr):
+#         try:
+#             if condition(i,v,*args,**kwargs):
+#                 res.append(v)
+#         except:
+#             try:
+#                 if condition(v,*args,**kwargs):
+#                     res.append(v)
+#             except:
+#                 continue
+#     return np.array(res)
 
-def which(array,condition,*args,**kwargs):
-    """
-    Return the first element that satisfy the condition
-    """
-    try:
-        return all_which(array,condition,*args,**kwargs)[0]
-    except:
-        return None
+# def which(array,condition,*args,**kwargs):
+#     """
+#     Return the first element that satisfy the condition
+#     """
+#     try:
+#         return all_which(array,condition,*args,**kwargs)[0]
+#     except:
+#         return None
 
 
-def all_where(array,condition,*args,**kwargs):
-    """
-    Return the all indexes that satisfy the condition
-    """
-    arr = as_iterable(array)
-    idxes = range(len(arr))
-    idx = []
-    for i,v in zip(idxes,arr):
-        try:
-            if condition(i,v,*args,**kwargs):
-                idx.append(i)
-        except:
-            if condition(v,*args,**kwargs):
-                idx.append(i)
-            try:
-                if condition(v,*args,**kwargs):
-                    idx.append(i)
-            except:
-                continue
-    return np.array(idx)
+# # def all_where(array,condition,*args,**kwargs):
+# #     """
+# #     Return the all indexes that satisfy the condition
+# #     """
+# #     arr = as_iterable(array)
+# #     idxes = range(len(arr))
+# #     idx = []
+# #     for i,v in zip(idxes,arr):
+# #         try:
+# #             if condition(i,v,*args,**kwargs):
+# #                 idx.append(i)
+# #         except:
+# #             try:
+# #                 if condition(v,*args,**kwargs):
+# #                     idx.append(i)
+# #             except:
+# #                 continue
+# #     return np.array(idx)
 
-def where(array,condition,*args,**kwargs):
-    """
-    Return the first index that satisfy the condition
-    """
-    try:
-        return all_where(array,condition,*args,**kwargs)[0]
-    except:
-        return None
+# def all_where(array,condition=lambda x:True,*args,**kwargs):
+#     """
+#     Return the all indexes that satisfy the condition
 
-def at(array,iloc=None,loc=None):
-    """
-    Pandas-like array accessor method for generic iterable class. 
+#     Update: 
+#         - By default return the entire index of array
+#         - If array or condition is an iterable of booleans, return indexes where values == `True`
+#         - If condition is a value (`int`,`float` or `None`) then look for such values in the array
+#         - Simplified the try-except expression using `tryf()`
+#     """
 
-    Array elements can be accessed using `iloc` as indexes or `loc` as a boolean array indexer
+#     arr = as_iterable(array)
+#     idxes = range(len(arr))
+#     idx = []
+#     if isinstance(array,Iterable) and dtype(array) == "bool":
+#         idx = np.where(array)[0]
+#     elif isinstance(array,Iterable) and dtype(condition) == "bool":
+#         idx = np.where(condition)[0]
+#     elif type_of(condition).startswith(("int","float","None")):
+#         temp = condition
+#         condition = lambda x: x == temp
+#         for i,v in zip(idxes,arr):
+#             if tryf(condition,i,v,*args,**kwargs) and condition(i,v,*args,**kwargs):
+#                 idx.append(i)
+#             elif tryf(condition,v,*args,**kwargs) and condition(v,*args,**kwargs):
+#                 idx.append(i)
 
-    Example:
-    ---------
-    ```
-    array = range(10)
-    at(array,loc=[True,False,True,True,True,True])
-    >> array([0, 2, 3, 4, 5])
+#     return np.array(idx)
 
-    at(array,[3,5,3,12])
-    >> array([3,5,3])
-    ```
-    """
-    arr  = as_iterable(array)
-    loc  = isNone(loc, then = [True]*len(arr))
-    iloc = isNone(iloc,then = np.where(loc)[0]) 
-    res  = apply(iloc, lambda v: arr[v])
-    return np.array(res)
+# def where(array,condition,*args,**kwargs):
+#     """
+#     Return the first index that satisfy the condition
+#     """
+#     try:
+#         return all_where(array,condition,*args,**kwargs)[0]
+#     except:
+#         return None
+
+# def at(array,iloc=None,loc=None):
+#     """
+#     Pandas-like array accessor method for generic iterable class. 
+
+#     Array elements can be accessed using `iloc` as indexes or `loc` as a boolean array indexer
+
+#     Example:
+#     ---------
+#     ```
+#     array = range(10)
+#     at(array,loc=[True,False,True,True,True,True])
+#     >> array([0, 2, 3, 4, 5])
+
+#     at(array,[3,5,3,12])
+#     >> array([3,5,3])
+#     ```
+#     """
+#     arr  = as_iterable(array)
+#     loc  = isNone(loc, then = [True]*len(arr))
+#     iloc = isNone(iloc,then = np.where(loc)[0]) 
+#     res  = apply(iloc, lambda v: arr[v])
+#     return np.array(res)
 
 def iter_pairs(array):
     """
@@ -676,19 +703,19 @@ def sample(array,k=None,replacement=False,seed=None,**kwargs):
 
 
 
-def all(arr,condition,*args,**kwargs):
-    """
-    Whether all elements in the array satisfy the condition
-    """
-    return np.all(apply(arr,condition,*args,**kwargs))
+# def all(arr,condition,*args,**kwargs):
+#     """
+#     Whether all elements in the array satisfy the condition
+#     """
+#     return np.all(apply(arr,condition,*args,**kwargs))
 
-def any(arr,condition,*args,**kwargs):
-    """
-    Whether any element in the array satisfy the condition. 
+# def any(arr,condition,*args,**kwargs):
+#     """
+#     Whether any element in the array satisfy the condition. 
     
-    To retrieve which elements satisfy the condition, use `which()` or `all_which()`
-    """
-    return np.any(apply(arr,condition,*args,**kwargs))
+#     To retrieve which elements satisfy the condition, use `which()` or `all_which()`
+#     """
+#     return np.any(apply(arr,condition,*args,**kwargs))
 
 
 def num_range(num,step=1):
@@ -743,3 +770,88 @@ def tryf(f,*args,**kwargs):
         return True
     except:
         return False
+
+def type_of(a):
+    return type(a).__name__.__str__()
+
+
+
+def whether(a,value_or_condition=lambda x: True,*args,**kwargs):
+    is_array_of_dtype = lambda x,dty: isinstance(x,Iterable) and dtype(x).startswith(dty)
+    is_function       = lambda x: type_of(x).startswith("function")
+    is_value          = lambda x: type_of(x).startswith(("int","float","None"))
+
+    if is_array_of_dtype(a,"bool"):
+        res = np.array(a)
+    elif is_value(value_or_condition):
+        res = np.array(a) == value_or_condition
+    elif is_function(value_or_condition):
+        res = apply(a,value_or_condition,*args,**kwargs)
+    else:
+        res = np.array(a) != None
+    return res
+
+
+def where(a,value_or_condition =lambda x: True,*args,**kwargs):
+    is_array_of_dtype = lambda x,dty: isinstance(x,Iterable) and dtype(x).startswith(dty)
+    is_function       = lambda x: type_of(x).startswith("function")
+    is_value          = lambda x: type_of(x).startswith(("int","float","None"))
+
+    if is_array_of_dtype(a,"bool"):
+        res = np.array(a)
+
+    elif is_array_of_dtype(value_or_condition,"bool"):
+        res = np.where(value_or_condition)[0]
+
+    elif is_value(value_or_condition):
+        res = np.where(np.array(a) == value_or_condition)[0]
+
+    elif is_function(value_or_condition):
+        res = np.where(apply(a,value_or_condition,*args,**kwargs))[0]
+
+    else:
+        res = np.where(np.array(a) != None)[0]
+
+    return res
+
+def at(array,loc_or_iloc=lambda x: True):
+    is_array_of_dtype = lambda x,dty: isinstance(x,Iterable) and dtype(x).startswith(dty)
+    is_function       = lambda x: type_of(x).startswith("function")
+    is_value          = lambda x: type_of(x).startswith(("int","float","None"))
+
+    if is_function(loc_or_iloc) or is_value(loc_or_iloc):
+        res = np.array(array)[where(array,loc_or_iloc)]
+
+    elif is_array_of_dtype(loc_or_iloc,"bool"):
+        res = np.array(array)[where(loc_or_iloc)]
+
+    elif is_array_of_dtype(loc_or_iloc,"int"):
+        res = np.array(array)[loc_or_iloc]
+
+    else:
+        res = np.array(array)
+    return res
+
+def any(a,value_or_condition =lambda x: True,*args,**kwargs):
+    return np.any(whether(a,value_or_condition,*args,**kwargs))
+
+def all(a,value_or_condition =lambda x: True,*args,**kwargs):
+    return np.all(whether(a,value_or_condition,*args,**kwargs))
+
+
+def apply(array,func,*args,**kwargs):
+    """
+    Apply a function to all elements. Elements where the function can not be applied to (i.e., due to an exception) will be ignored from the output array
+    """
+    arr = as_iterable(array)
+    idxes = range(len(arr))
+    res = []
+    for i,v in zip(idxes,arr):
+        
+        if tryf(func,i,v,*args,**kwargs):
+            res.append(func(i,v,*args,**kwargs))
+
+        elif tryf(func,v,*args,**kwargs):
+            res.append(func(v,*args,**kwargs))
+
+    return np.array(res)
