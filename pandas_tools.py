@@ -164,6 +164,45 @@ def filter(df: pd.DataFrame or pd.Series, condition: pd.DataFrame or pd.Series, 
     index_filt = df_.loc[:,columns_filt][condition].dropna().index    
     return df_.loc[index_filt,columns_filt]
 
+def filter1(df,keys,vals):
+    index_name = isNone(df.index.name,then="index",els=df.index.name)
+    res = df.reset_index().set_index(keys)
+    res = res.loc[res.index.intersection(vals)]
+    if isinstance(res,pd.Series):
+        res = res.to_frame().T
+    res = res.reset_index().set_index(index_name)
+    res.index.name = df.index.name
+    return res
+
+def balance_sample(X,y,num_samples=None,seed=None):
+    """
+    ### Description: 
+    Sample inputs based on a distribution of target labels. By default will attempt to sample all classes equally according to the least populous class.
+    """
+    # Convert sampling_dist into list of distribution if not already is
+    counts,labels = label_counts(y).values(['counts','labels'])
+    if isNone(num_samples):
+        sampling_dist = np.full(shape = labels.shape,fill_value = min(counts))
+    elif type_of(num_samples).startswith(("int","float")):
+        sampling_dist = np.full(shape = labels.shape,fill_value = num_samples)
+    elif isinstance(num_samples,Iterable):
+        sampling_dist = np.array(num_samples)
+
+    sampled_iloc = []
+    for labels_i,counts_i,num_samples_i in zip(labels,counts,sampling_dist):
+        # Convert to class counts
+        if isNone(num_samples_i): 
+            dist_i = int(counts_i)
+        elif 0 <= num_samples_i and num_samples_i < 1:
+            dist_i = int(counts_i * num_samples_i)
+        else:
+            dist_i = int(max(0,min(num_samples_i,counts_i)))
+        # Obtain samples with the labels_i 
+        sampled_labels_i_iloc = sample(np.where(y==labels_i)[0],k=dist_i,seed=seed)
+        sampled_iloc.append(sampled_labels_i_iloc)
+    sampled_iloc = ravel(sampled_iloc)
+    return X[sampled_iloc], y[sampled_iloc]
+
 def per_class_sample(X: pd.DataFrame, y: pd.DataFrame or pd.Series, 
                         sampling_dist: str or int or float or Iterable='min',random_state: int=None) -> Tuple[pd.DataFrame or pd.Series, pd.DataFrame or pd.Series]:
     """
@@ -225,42 +264,80 @@ def match(df_in: pd.DataFrame or pd.Series, oper: str ,values: Iterable[int],str
     df_out = df_in[mult_result].dropna(how={True:"any",False:"all"}[strict])
     return df_out
 
-def aggregate(df,identifiers,agg_columns=None,action=None,clip_outliers=None,**kwargs):    
-    """
-    Aggregate a subset of columns in a DataFrame along a key column
+# def aggregate(df,identifiers,agg_columns=None,action=None,clip_outliers=None,**kwargs):    
+#     """
+#     Aggregate a subset of columns in a DataFrame along a key column
     
-    action == [`sum`,`mean`,`mode`,`median`,`count`]
-    """
-    df_indexed = df.set_index(identifiers).sort_index()
-    unique_indexes = df_indexed.index.drop_duplicates()
-    agg_columns = isNone(agg_columns,then = df.columns.drop(identifiers))
+#     action == [`sum`,`mean`,`mode`,`median`,`count`]
+#     """
+#     df_indexed = df.set_index(identifiers).sort_index()
+#     unique_indexes = df_indexed.index.drop_duplicates()
+#     agg_columns = isNone(agg_columns,then = df.columns.drop(identifiers))
 
-    df_aggregated = pd.DataFrame(index=unique_indexes,columns=agg_columns)
-    df_aggregated["action"] = action
-    df_aggregated["count"] = 0  
+#     df_aggregated = pd.DataFrame(index=unique_indexes,columns=agg_columns)
+#     df_aggregated["action"] = action
+#     df_aggregated["count"] = 0  
 
-    for index in unique_indexes:
-        df_group = df_indexed.loc[index,agg_columns]
-        if isinstance(df_group,pd.Series):
-            df_aggregated.loc[index,agg_columns] = df_group
-            df_aggregated.loc[index,"count"] = 1
+#     for index in unique_indexes:
+#         df_group = df_indexed.loc[index,agg_columns]
+#         if isinstance(df_group,pd.Series):
+#             df_aggregated.loc[index,agg_columns] = df_group
+#             df_aggregated.loc[index,"count"] = 1
 
-        # Clip outliers if specified
-        else:
-            if not isNone(clip_outliers):
-                df_group = remove_outliers(df_group,target_column=clip_outliers,**kwargs)
-            df_aggregated.loc[index,"count"] = len(df_group)
-            if action == "mean":
-                df_aggregated.loc[index,agg_columns] = df_group.mean().values
-            elif action == "mode":
-                df_aggregated.loc[index,agg_columns] = df_group.mode().values
-            elif action == "median":
-                df_aggregated.loc[index,agg_columns] = df_group.median().values
-            elif action == "sum":
-                df_aggregated.loc[index,agg_columns] = df_group.sum().values
+#         # Clip outliers if specified
+#         else:
+#             if not isNone(clip_outliers):
+#                 df_group = remove_outliers(df_group,target_column=clip_outliers,**kwargs)
+#             df_aggregated.loc[index,"count"] = len(df_group)
+#             if action == "mean":
+#                 df_aggregated.loc[index,agg_columns] = df_group.mean().values
+#             elif action == "mode":
+#                 df_aggregated.loc[index,agg_columns] = df_group.mode().values
+#             elif action == "median":
+#                 df_aggregated.loc[index,agg_columns] = df_group.median().values
+#             elif action == "sum":
+#                 df_aggregated.loc[index,agg_columns] = df_group.sum().values
 
-    df_aggregated = df_aggregated.reset_index()
-    return df_aggregated
+#     df_aggregated = df_aggregated.reset_index()
+#     return df_aggregated
+
+def aggregate(df,levels=[],values=[],ignore=[],action="mean"):
+    df_id = df.set_index(levels) if levels else df
+    indexes = df_id.index.drop_duplicates()
+    agg_scores = []
+    for idx in indexes:
+        agg_scores_i = agg(df_id.loc[idx],values=values,ignore=ignore,action=action)
+        agg_scores.append(agg_scores_i)
+    agg_scores = pd.DataFrame(agg_scores,index=indexes).reset_index() if levels else pd.DataFrame(agg_scores,index=indexes)
+    return agg_scores
+
+def agg(df,values=[],ignore=[],action="mean"):
+    is_single_series = lambda x: isinstance(x,pd.Series)
+    if is_single_series(df):
+        agg_vals =  dict(df.drop(ignore))
+        agg_vals["count"] = 1
+    else:
+        is_num_series = lambda x: type_of(x[0]).startswith(("int","float"))
+        is_ndarray_series = lambda x: type_of(x[0]).startswith(("ndarray"))
+        values = pd.Index(as_iterable(values)).drop(ignore) if values else df.columns.drop(ignore)
+        f = {
+            "mean": lambda x: np.mean(x.dropna(),axis=0),
+            "median": lambda x: np.median(x.dropna(),axis=0),
+            "sum"  : lambda x: np.sum(x.dropna(),axis=0)
+        }[action]
+        agg_vals = dict()
+        for c in values:
+            if is_num_series(df[c]):
+                val = f(df[c])
+                agg_vals[c] = np.round(val,4)
+            elif is_ndarray_series(df[c]):
+                val = np.array(f(expand(df[c].dropna())))
+                agg_vals[c] = np.round(val,1)
+            else:
+                agg_vals[c] = np.unique(df[c])
+        agg_vals["count"] = len(df)
+    agg_vals["action"] = action
+    return agg_vals
 
 def groupings(df,identifiers,reset_index=True):
     """
@@ -331,102 +408,7 @@ def remove_outliers(array,std_threshold=1,clip="both",target_column=None):
         return array[ilocs]
 
 
-# ----------------------------------------------
-# Encoders
-#----------------------------------------------
 
-class CategoricalEncoder:
-    def __init__(self,target_labels=None):
-        super().__init__()
-        self.target_labels = target_labels
-    
-    def fit(self,array):
-        array_labels = pd.unique(array)
-        self.target_labels = isNone(self.target_labels,then=range(len(array_labels)))
-        self.encode_mappings = dict(zip(array_labels,self.target_labels))
-        self.decode_mappings = dict(zip(self.target_labels,array_labels))
-        return self
-
-    def transform(self,array,dtype=object):
-        return np.array([self.encode_mappings[a] for a in as_iterable(array)],dtype=dtype)
-
-    def inv_transform(self,array,dtype=object):
-        return np.array([self.decode_mappings[a] for a in as_iterable(array)],dtype=dtype)
-
-    def fit_transform(self,array,dtype=object):
-        return self.fit(array).transform(array,dtype)
-
-    def mappings(self):
-        return self.encode_mappings, self.decode_mappings
-
-
-class NullEncoder:
-    def __init__(self,fillna=None,unique=None):
-        self.fillna = fillna
-        self.unique = unique
-    
-    def fit(self,array):
-        arr = pd.Series(array)
-        if tryf(self.fillna,arr):
-            self.nan_value = self.fillna(arr)  
-        else:
-            self.nan_value = self.fillna
-        # Ensure that the nan value is unique (if required) by incrementing by a specified value
-        while self.nan_value in np.array(array) and self.unique:
-            self.nan_value += self.unique
-        return self
-
-    def transform(self,array):
-        return pd.Series(array).fillna(self.nan_value).values
-
-    def fit_transform(self,array):
-        return self.fit(array).transform(array)
-
-    def inv_transform(self,array):
-        return pd.Series(array).replace({self.nan_value: None}).values
-
-    def mappings(self):
-        return {None:self.nan_value},{self.nan_value:None}
-
-
-class AutoDataPrep:
-    def __init__(self,max_categories=10,
-                fillna_cont=np.mean, unique_cont=None,
-                fillna_cat="$null$",unique_cat=None):
-        self.max_categories = max_categories
-        self.fillna_cont = fillna_cont
-        self.unique_cont = unique_cont
-        self.fillna_cat = fillna_cat
-        self.unique_cat = unique_cat
-        self.mappings_ = dict()
-
-    def fit_transform(self,X):
-        X_prep = X.copy()
-        for c in X.columns:
-            is_categorical = lambda x: dtype(x)=="object" or len(pd.unique(x)) <= self.max_categories # or not try_f(as_dtype("float"),x)
-            equals = lambda a,b: np.all(a==b)
-            if is_categorical(X[c]):
-                encoders    = [ NullEncoder(fillna=self.fillna_cat,unique=self.unique_cat),
-                                CategoricalEncoder()]
-                X0 = encoders[0].fit_transform(X[c])
-                X1 = encoders[1].fit_transform(X0,dtype=int)
-                X_prep[c]   = X1
-                mappings = encoders[1].mappings()[0]
-                if self.fillna_cat in mappings:
-                    mappings.update({None:mappings.pop(self.fillna_cat)})
-            else:
-                encoders = [NullEncoder(fillna=self.fillna_cont,unique=self.unique_cont)]
-                X0 = encoders[0].fit_transform(X[c])
-                X_prep[c] = X0
-                if equals(X_prep[c],X[c]):
-                    mappings = None
-                else:
-                    mappings = encoders[0].mappings()[0]
-            self.mappings_[c] = mappings
-        return X_prep
-
-    def mappings(self):
-        return self.mappings_
 
 
 #----------------------------------------

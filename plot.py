@@ -5,7 +5,7 @@ import seaborn as sns
 from math import *
 import matplotlib.gridspec as gridspec
 from .main import *
-from .pandas import *
+from .pandas_tools import *
 
 def grid_shape(num_plots,size):
     MAX_WIDTH = 30

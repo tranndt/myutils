@@ -4,7 +4,7 @@ import torch
 import seaborn as sns
 import torch.nn as nn
 from .main import *
-from .pandas import *
+from .pandas_tools import *
 from sklearn.metrics import *
 from sklearn.model_selection import *
 

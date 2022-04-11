@@ -87,6 +87,13 @@ class PseudoObject():
     def __repr__(self):
         return f"{self.__name__} {self.dict()}"
 
+
+def set_attributes(obj,**kwargs):
+    if kwargs:
+        for attr in kwargs.keys():
+            obj.__setattr__(attr,kwargs[attr])
+    return obj
+    
 # -----------------------------------------------
 #   TIMER FOR PROCESSES/TASKS
 # -----------------------------------------------
@@ -130,6 +137,51 @@ class ProcessTimer:
 
     def time_elapsed(self,job_id=0):
         return -1 if (job_id not in self.start_.keys() or job_id not in self.curr_.keys()) else self.curr_[job_id] - self.start_[job_id]
+
+class TaskTimer:
+    def __init__(self,id=None):
+        self.id = id
+        self.start()
+
+    def start(self):
+        self.start_= time.time()
+        self.curr_ = self.start_
+        self.prev_ = self.start_
+
+    def step(self):
+        self.prev_ = self.curr_
+        self.curr_ = time.time()
+
+    def execute(self,f,*args,**kwargs):
+        """
+        Record the time for executing a function.
+
+        Return 
+        ---------
+        Return the time of execution followed by the function followed by the return value(s)
+        """
+        self.start()
+        ret_val = f(*args,**kwargs)
+        self.step()
+        time_exec = self.total_time()
+        return time_exec,ret_val
+
+
+    def step_time(self):
+        return self.curr_ - self.prev_
+
+    def total_time(self):
+        return self.curr_ - self.start_
+
+    def fmt(self,seconds):
+        """
+        Convert time in seconds to a string representation of the format hh:mm:ss
+        """
+        format_digits = lambda x: f'0{int(x)}' if x < 10 else f'{int(x)}'
+        hh = format_digits(seconds // 3600)
+        mm = format_digits(seconds % 3600 // 60)
+        ss = format_digits(seconds % 60)
+        return f'{hh}:{mm}:{ss}'
 
 # -----------------------------------------------
 #   LOGIC FUNCTIONS
@@ -280,7 +332,17 @@ def label_counts(arr,labels=None):
     )
     return lab_cnt_obj
 
-def ravel(arr,dtype=None):
+def ravel_list(arr,except_=()):
+    res = as_iterable(arr,list)
+    is_non_string_iterable = lambda x: isinstance(x,Iterable) and not isinstance(x,(str,*as_iterable(except_)))
+    while True in apply(res,is_non_string_iterable): # While there exists a child of Iterable type and not a str
+        temp = []
+        for a in as_iterable(res):
+            temp += as_iterable(a,list) # Converting a to a list makes concatenation easier
+        res = temp
+    return res
+
+def ravel(arr,dtype=None,except_=()):
     """
     Ravel an Iterable of any depth
 
@@ -300,12 +362,7 @@ def ravel(arr,dtype=None):
     >> array(['a', 'string', 'is also', 'an', 'iterable'], dtype='<U8')
     ```
     """
-    res = as_iterable(arr,list)
-    while True in apply(res,lambda x: isinstance(x,Iterable) and not isinstance(x,str)): # While there exists a child of Iterable type and not a str
-        temp = []
-        for a in as_iterable(res):
-            temp += as_iterable(a,list) # Converting a to a list makes concatenation easier
-        res = temp
+    res = ravel_list(arr,except_=except_)
     return np.array(res,dtype)
 
 def get_array_iloc(arr,arr_true=None):
@@ -771,9 +828,17 @@ def tryf(f,*args,**kwargs):
     except:
         return False
 
+def tryf_return(els=None,f=None,*args,**kwargs):
+    return f(*args,**kwargs) if tryf(f,*args,**kwargs) else els
+
+def tryf_catch(f,*args,**kwargs):
+    try:
+        return f(*args,**kwargs)
+    except Exception as e:
+        return e
+
 def type_of(a):
     return type(a).__name__.__str__()
-
 
 
 def whether(a,value_or_condition=lambda x: True,*args,**kwargs):
@@ -855,3 +920,16 @@ def apply(array,func,*args,**kwargs):
             res.append(func(v,*args,**kwargs))
 
     return np.array(res)
+
+
+def printif(c=True,*args,**kwargs):
+    if c:
+        print(*args,**kwargs)
+
+def flushif(c=True,*args,**kwargs):
+    if c:
+        sys.stdout.write(*args,**kwargs)
+        sys.stdout.flush()
+
+def func(x):
+    return x*x
