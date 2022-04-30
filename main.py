@@ -10,6 +10,7 @@ import re
 import inspect
 import os
 import torch
+from os import walk
 
 
 # -----------------------------------------------
@@ -933,3 +934,26 @@ def flushif(c=True,*args,**kwargs):
 
 def func(x):
     return x*x
+
+def get_files(path,ext=None,full_path=False):
+    all_files_raw = sorted(next(walk(path), (None, None, []))[2])
+    all_files = []
+    for f in all_files_raw:
+        if full_path and (not ext or f.endswith(ext)):
+            all_files.append(f"{path}/{f}")
+        elif (not ext or f.endswith(ext)):
+            all_files.append(f)
+    return all_files
+
+def get_folders(path,full_path=False):
+    all_folders_raw = sorted(next(walk(path), (None, [], None))[1])
+    all_folders = []
+    for f in all_folders_raw:
+        if full_path and os.path.isdir(f"{path}/{f}"):
+            all_folders.append(f"{path}/{f}")
+        elif os.path.isdir(f"{path}/{f}"):
+            all_folders.append(f)
+    return all_folders
+
+
+sorted_by_values = lambda d,desc=True: {k: v for k, v in sorted(d.items(), key=lambda item: item[1],reverse=desc )}
