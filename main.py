@@ -969,3 +969,35 @@ def get_folders(path,full_path=False):
 
 
 sorted_by_values = lambda d,desc=True: {k: v for k, v in sorted(d.items(), key=lambda item: item[1],reverse=desc )}
+
+import json
+
+def read_json(filename,encoding='utf-8'):
+    with open(filename,'r',encoding=encoding) as f:
+        data = json.load(f)
+        f.close()
+    return data
+
+def write_json(data,write_to=None,encoding='utf-8'):
+    with open(write_to,'w',encoding=encoding) as f:
+        json.dump(data,f)
+        f.close()
+
+
+def filter(df,**kwargs):
+    """
+    filter(df, AAT = True)
+    filter(df,prefix=lambda x: x.str.startswith('c'))
+    """
+
+    if kwargs:
+        df_res = df.copy()
+        for k,v in kwargs.items():
+            if type_of(v) == 'function':
+                df_res = df_res[v(df_res[k])]
+            else:
+                df_res = df_res[df_res[k]==v]
+    return df_res
+
+def parse_as_array(string,dtype=int,pattern=r"([\w\d]+)"):
+    return np.array(re.findall(pattern,string),dtype=dtype)
