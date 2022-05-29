@@ -586,17 +586,29 @@ def get_args(func):
     return inspect.getfullargspec(func).args
 
 
+# def write_file(string,write_to=None,mode='w'):
+#     """
+#     Write or append string to a file. Create the new path if necessary
+#     """
+#     directory = write_to[:len(write_to) - write_to[::-1].index("/")]
+#     if not os.path.isdir(directory):
+#         os.makedirs(directory)
+#     if mode == 'a':
+#         string = "\n"+string
+#     with open(file=write_to,mode=mode) as f:
+#         f.write(string)
+#         f.close()
+
 def write_file(string,write_to=None,mode='w'):
     """
     Write or append string to a file. Create the new path if necessary
     """
-    directory = write_to[:len(write_to) - write_to[::-1].index("/")]
-    if not os.path.isdir(directory):
-        os.makedirs(directory)
-    if mode == 'a':
-        string = "\n"+string
+    makedir_to_file(write_to)
     with open(file=write_to,mode=mode) as f:
-        f.write(string)
+        if mode == 'a':
+            f.write(f"\n{string}")
+        elif mode == 'w':
+            f.write(string)        
         f.close()
 
 def read_file(filename):

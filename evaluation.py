@@ -129,6 +129,27 @@ def run_test_iteration(test_iter, model_iter, return_trained_model=False):
     else:
         return test_iter_result
 
+def create_test_iteration(dataset_obj,fsl_samples=None,random_state=None):
+    # Load in our dataset and prepare it
+    X,y,name = dataset_obj.values(['X','y','name'])
+    if isinstance(y,pd.DataFrame): y = y.iloc[:,-1]
+    print(label_counts(y))
+    X_train,X_test,y_train,y_test = train_test_split(X,y,stratify=y,random_state=random_state)
+    X_train_fsl,y_train_fsl = per_class_sample(X_train,y_train,sampling_dist=fsl_samples,random_state=random_state)
+    X_train_rem = X_train.drop(index=X_train_fsl.index)
+    y_train_rem = y_train.drop(index=y_train_fsl.index)
+
+    # Package in an object for reusability
+    test_obj = PseudoObject(
+        name = name,
+        random_state = random_state,
+        fsl_samples = fsl_samples,
+        X_train = X_train, y_train = y_train,
+        X_test = X_test, y_test = y_test,
+        X_train_fsl = X_train_fsl, y_train_fsl = y_train_fsl,
+        X_train_rem = X_train_rem, y_train_rem = y_train_rem
+    )
+    return test_obj
 
 def run_test_batch(dataset_obj,random_states,fsl_samples,model_batch,input_flag=0,write_to=None,save_test_ilocs=True):
     test_batch_result = pd.DataFrame()
@@ -137,7 +158,7 @@ def run_test_batch(dataset_obj,random_states,fsl_samples,model_batch,input_flag=
         # Test each model+kwargs combination and record the result 
         for model_iter in model_batch:
             for n_samples in fsl_samples: #ravel() to prevent bugs
-                test_iter = create_test_iteration(dataset_obj,n_samples,random_state,input_flag)
+                test_iter = create_test_iteration(dataset_obj,n_samples,random_state)
                 test_iter_result = run_test_iteration(test_iter,model_iter)
                 test_batch_result = pd.concat([test_batch_result,test_iter_result.to_frame(dtype="object")],ignore_index=True)  # Append result to DataFrame, converted to "object" first to avoid turning string into int
                 write_dataframe(test_batch_result,write_to)
