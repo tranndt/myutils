@@ -943,8 +943,6 @@ def flushif(c=True,*args,**kwargs):
         sys.stdout.write(*args,**kwargs)
         sys.stdout.flush()
 
-def func(x):
-    return x*x
 
 def get_files(path,ext=None,full_path=False):
     all_files_raw = sorted(next(walk(path), (None, None, []))[2])
@@ -1000,3 +998,23 @@ def filter(df,**kwargs):
 
 def parse_as_array(string,dtype=int,pattern=r"([\w\d]+)"):
     return np.array(re.findall(pattern,string),dtype=dtype)
+
+
+def flush(string,inline=None):
+    if inline is None:
+        sys.stdout.write(f"{string}")
+    elif inline:
+        sys.stdout.write(f"\r{string}")
+    else:
+        sys.stdout.write(f"{string}\n")
+    sys.stdout.flush()
+
+
+def dict_metadata(d):
+    if isinstance(d,list) and len(d) > 0 and isinstance(d[0],dict):
+        return [dict_metadata(d[0])]
+    else:
+        d_new = {}
+        for k,v in d.items():
+            d_new[k] = dict_metadata(v) if isinstance(v,dict) else type_of(v)
+        return d_new
