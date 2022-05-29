@@ -585,17 +585,29 @@ def get_args(func):
     return inspect.getfullargspec(func).args
 
 
+# def write_file(string,write_to=None,mode='w'):
+#     """
+#     Write or append string to a file. Create the new path if necessary
+#     """
+#     directory = write_to[:len(write_to) - write_to[::-1].index("/")]
+#     if not os.path.isdir(directory):
+#         os.makedirs(directory)
+#     if mode == 'a':
+#         string = "\n"+string
+#     with open(file=write_to,mode=mode) as f:
+#         f.write(string)
+#         f.close()
+
 def write_file(string,write_to=None,mode='w'):
     """
     Write or append string to a file. Create the new path if necessary
     """
-    directory = write_to[:len(write_to) - write_to[::-1].index("/")]
-    if not os.path.isdir(directory):
-        os.makedirs(directory)
-    if mode == 'a':
-        string = "\n"+string
+    makedir_to_file(write_to)
     with open(file=write_to,mode=mode) as f:
-        f.write(string)
+        if mode == 'a':
+            f.write(f"\n{string}")
+        elif mode == 'w':
+            f.write(string)        
         f.close()
 
 def read_file(filename):
@@ -953,3 +965,38 @@ def get_folders(path,full_path=False):
         elif os.path.isdir(f"{path}/{f}"):
             all_folders.append(f)
     return all_folders
+
+
+sorted_by_values = lambda d,desc=True: {k: v for k, v in sorted(d.items(), key=lambda item: item[1],reverse=desc )}
+
+import json
+
+def read_json(filename,encoding='utf-8'):
+    with open(filename,'r',encoding=encoding) as f:
+        data = json.load(f)
+        f.close()
+    return data
+
+def write_json(data,write_to=None,encoding='utf-8'):
+    with open(write_to,'w',encoding=encoding) as f:
+        json.dump(data,f)
+        f.close()
+
+
+def filter(df,**kwargs):
+    """
+    filter(df, AAT = True)
+    filter(df,prefix=lambda x: x.str.startswith('c'))
+    """
+
+    if kwargs:
+        df_res = df.copy()
+        for k,v in kwargs.items():
+            if type_of(v) == 'function':
+                df_res = df_res[v(df_res[k])]
+            else:
+                df_res = df_res[df_res[k]==v]
+    return df_res
+
+def parse_as_array(string,dtype=int,pattern=r"([\w\d]+)"):
+    return np.array(re.findall(pattern,string),dtype=dtype)
